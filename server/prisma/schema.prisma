@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum ServerMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique @db.VarChar(191)
+  username     String         @unique @db.VarChar(191)
+  passwordHash String         @db.VarChar(255)
+  displayName  String         @db.VarChar(191)
+  avatarUrl    String?        @db.VarChar(2048)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  ownedServers Server[]       @relation("ServerOwner")
+  memberships  ServerMember[]
+  bans         ServerBan[]    @relation("BannedUser")
+  issuedBans   ServerBan[]    @relation("BanIssuer")
+}
+
+model Server {
+  id           String         @id @default(cuid())
+  name         String         @db.VarChar(191)
+  avatarUrl    String?        @db.VarChar(2048)
+  isPublic     Boolean        @default(false)
+  ownerId      String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  owner        User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members      ServerMember[]
+  voiceChannels VoiceChannel[]
+  bans         ServerBan[]
+
+  @@index([ownerId])
+}
+
+model ServerMember {
+  id        String           @id @default(cuid())
+  serverId  String
+  userId    String
+  role      ServerMemberRole @default(MEMBER)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  server    Server           @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, userId])
+  @@index([userId])
+}
+
+model VoiceChannel {
+  id        String   @id @default(cuid())
+  serverId  String
+  name      String   @db.VarChar(191)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, sortOrder])
+}
+
+model ServerBan {
+  id             String   @id @default(cuid())
+  serverId       String
+  userId         String
+  bannedByUserId String
+  createdAt      DateTime @default(now())
+  server         Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  user           User     @relation("BannedUser", fields: [userId], references: [id], onDelete: Cascade)
+  bannedBy       User     @relation("BanIssuer", fields: [bannedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([serverId, userId])
+  @@index([bannedByUserId])
+}

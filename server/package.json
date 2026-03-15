@@ -1,0 +1,35 @@
+{
+  "name": "slovo-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "prisma generate",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "test": "tsx --test tests/**/*.test.ts",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:validate": "prisma validate"
+  },
+  "dependencies": {
+    "@prisma/adapter-mariadb": "7.5.0",
+    "@prisma/client": "7.5.0",
+    "dobrunia-liverail-contracts": "1.0.0",
+    "dobrunia-liverail-server": "1.0.0",
+    "dotenv": "17.3.1",
+    "graphql": "16.13.1",
+    "graphql-yoga": "5.18.1",
+    "mediasoup": "3.19.18",
+    "strictql": "1.0.0",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "25.5.0",
+    "prisma": "7.5.0",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}
