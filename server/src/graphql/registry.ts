@@ -5,13 +5,14 @@ import {
   GRAPHQL_MAX_QUERY_DEPTH,
 } from "../config/constants.js";
 import { healthQuery } from "./operations/health.js";
+import { meQuery } from "./operations/me.js";
 import { loginMutation } from "./operations/login.js";
 import { registerMutation } from "./operations/register.js";
 
 /**
  * Реестр read-операций текущего GraphQL foundation.
  */
-export const queries = [healthQuery];
+export const queries = [healthQuery, meQuery];
 
 /**
  * Реестр write-операций, который будет расширяться следующими задачами.
