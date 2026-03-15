@@ -10,10 +10,10 @@
     "forceConsistentCasingInFileNames": true,
     "allowSyntheticDefaultImports": true,
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": "..",
     "lib": ["ES2022"],
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "tsconfig.build.json"],
+  "include": ["src/**/*.ts", "tests/**/*.ts", "../shared/**/*.ts", "tsconfig.build.json"],
   "exclude": ["dist", "node_modules"]
 }

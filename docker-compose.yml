@@ -11,9 +11,12 @@ services:
       MYSQL_PASSWORD: slovo
       MYSQL_ROOT_PASSWORD: root
     volumes:
-      - ./mysql-data:/var/lib/mysql
+      - slovo-mysql-data:/var/lib/mysql
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -proot || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
+
+volumes:
+  slovo-mysql-data:

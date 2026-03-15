@@ -7,6 +7,7 @@ import {
 } from "./config/constants.js";
 import { createDataLayer, disposeDataLayer } from "./data/prisma.js";
 import { createGraphqlServer } from "./graphql/server.js";
+import { createSlovoRealtimeServer } from "./realtime/runtime.js";
 
 /**
  * Поднимает минимальный HTTP-сервер, который позже будет расширен GraphQL и realtime-слоями.
@@ -23,12 +24,16 @@ async function startServer() {
     dataLayer,
   });
   const server = createServer(yoga);
+  const realtime = createSlovoRealtimeServer({
+    httpServer: server,
+  });
 
   await new Promise<void>((resolve) => {
     server.listen(port, resolve);
   });
 
   const shutdown = async () => {
+    realtime.io.close();
     server.close();
     await disposeDataLayer(dataLayer);
   };

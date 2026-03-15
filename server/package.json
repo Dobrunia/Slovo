@@ -7,7 +7,7 @@
     "postinstall": "prisma generate",
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/index.js",
+    "start": "node dist/server/src/index.js",
     "test": "tsx --test tests/**/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
@@ -23,6 +23,7 @@
     "graphql": "16.13.1",
     "graphql-yoga": "5.18.1",
     "mediasoup": "3.19.18",
+    "socket.io": "^4.8.3",
     "strictql": "1.0.0",
     "zod": "4.3.6"
   },
