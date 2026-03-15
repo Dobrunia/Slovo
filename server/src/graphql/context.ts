@@ -1,3 +1,4 @@
+import { resolveSessionUserId } from "../auth/session.js";
 import type { DataLayer } from "../data/prisma.js";
 
 /**
@@ -16,9 +17,12 @@ type ContextInput = {
 /**
  * Создает единый контекст запроса для GraphQL-операций.
  */
-export function createGraphqlContext(input: ContextInput): GraphqlContext {
+export async function createGraphqlContext(input: ContextInput): Promise<GraphqlContext> {
   return {
     dataLayer: input.dataLayer,
-    userId: input.request.headers.get("x-user-id"),
+    userId: await resolveSessionUserId({
+      dataLayer: input.dataLayer,
+      headers: input.request.headers,
+    }),
   };
 }

@@ -52,6 +52,7 @@ export const AnyNull = runtime.AnyNull
 
 export const ModelName = {
   User: 'User',
+  AuthSession: 'AuthSession',
   Server: 'Server',
   ServerMember: 'ServerMember',
   VoiceChannel: 'VoiceChannel',
@@ -86,6 +87,16 @@ export const UserScalarFieldEnum = {
 } as const
 
 export type UserScalarFieldEnum = (typeof UserScalarFieldEnum)[keyof typeof UserScalarFieldEnum]
+
+
+export const AuthSessionScalarFieldEnum = {
+  id: 'id',
+  tokenHash: 'tokenHash',
+  userId: 'userId',
+  createdAt: 'createdAt'
+} as const
+
+export type AuthSessionScalarFieldEnum = (typeof AuthSessionScalarFieldEnum)[keyof typeof AuthSessionScalarFieldEnum]
 
 
 export const ServerScalarFieldEnum = {
@@ -162,6 +173,15 @@ export const UserOrderByRelevanceFieldEnum = {
 } as const
 
 export type UserOrderByRelevanceFieldEnum = (typeof UserOrderByRelevanceFieldEnum)[keyof typeof UserOrderByRelevanceFieldEnum]
+
+
+export const AuthSessionOrderByRelevanceFieldEnum = {
+  id: 'id',
+  tokenHash: 'tokenHash',
+  userId: 'userId'
+} as const
+
+export type AuthSessionOrderByRelevanceFieldEnum = (typeof AuthSessionOrderByRelevanceFieldEnum)[keyof typeof AuthSessionOrderByRelevanceFieldEnum]
 
 
 export const ServerOrderByRelevanceFieldEnum = {

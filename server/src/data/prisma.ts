@@ -1,4 +1,5 @@
 import { PrismaMariaDb } from "@prisma/adapter-mariadb";
+import { DEFAULT_DATABASE_PORT } from "../config/constants.js";
 import { PrismaClient } from "../generated/prisma/client.js";
 
 /**
@@ -69,7 +70,7 @@ function createMariaDbAdapter(databaseUrl: string): PrismaMariaDb {
 
   return new PrismaMariaDb({
     host: parsedUrl.hostname,
-    port: parsedUrl.port ? Number(parsedUrl.port) : 3306,
+    port: parsedUrl.port ? Number(parsedUrl.port) : DEFAULT_DATABASE_PORT,
     user: decodeURIComponent(parsedUrl.username),
     password: decodeURIComponent(parsedUrl.password),
     database,

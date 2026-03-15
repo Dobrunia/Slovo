@@ -210,6 +210,7 @@ export type UserWhereInput = {
   memberships?: Prisma.ServerMemberListRelationFilter
   bans?: Prisma.ServerBanListRelationFilter
   issuedBans?: Prisma.ServerBanListRelationFilter
+  authSessions?: Prisma.AuthSessionListRelationFilter
 }
 
 export type UserOrderByWithRelationInput = {
@@ -225,6 +226,7 @@ export type UserOrderByWithRelationInput = {
   memberships?: Prisma.ServerMemberOrderByRelationAggregateInput
   bans?: Prisma.ServerBanOrderByRelationAggregateInput
   issuedBans?: Prisma.ServerBanOrderByRelationAggregateInput
+  authSessions?: Prisma.AuthSessionOrderByRelationAggregateInput
   _relevance?: Prisma.UserOrderByRelevanceInput
 }
 
@@ -244,6 +246,7 @@ export type UserWhereUniqueInput = Prisma.AtLeast<{
   memberships?: Prisma.ServerMemberListRelationFilter
   bans?: Prisma.ServerBanListRelationFilter
   issuedBans?: Prisma.ServerBanListRelationFilter
+  authSessions?: Prisma.AuthSessionListRelationFilter
 }, "id" | "email" | "username">
 
 export type UserOrderByWithAggregationInput = {
@@ -287,6 +290,7 @@ export type UserCreateInput = {
   memberships?: Prisma.ServerMemberCreateNestedManyWithoutUserInput
   bans?: Prisma.ServerBanCreateNestedManyWithoutUserInput
   issuedBans?: Prisma.ServerBanCreateNestedManyWithoutBannedByInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateInput = {
@@ -302,6 +306,7 @@ export type UserUncheckedCreateInput = {
   memberships?: Prisma.ServerMemberUncheckedCreateNestedManyWithoutUserInput
   bans?: Prisma.ServerBanUncheckedCreateNestedManyWithoutUserInput
   issuedBans?: Prisma.ServerBanUncheckedCreateNestedManyWithoutBannedByInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserUpdateInput = {
@@ -317,6 +322,7 @@ export type UserUpdateInput = {
   memberships?: Prisma.ServerMemberUpdateManyWithoutUserNestedInput
   bans?: Prisma.ServerBanUpdateManyWithoutUserNestedInput
   issuedBans?: Prisma.ServerBanUpdateManyWithoutBannedByNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateInput = {
@@ -332,6 +338,7 @@ export type UserUncheckedUpdateInput = {
   memberships?: Prisma.ServerMemberUncheckedUpdateManyWithoutUserNestedInput
   bans?: Prisma.ServerBanUncheckedUpdateManyWithoutUserNestedInput
   issuedBans?: Prisma.ServerBanUncheckedUpdateManyWithoutBannedByNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateManyInput = {
@@ -423,6 +430,20 @@ export type DateTimeFieldUpdateOperationsInput = {
   set?: Date | string
 }
 
+export type UserCreateNestedOneWithoutAuthSessionsInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAuthSessionsInput, Prisma.UserUncheckedCreateWithoutAuthSessionsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAuthSessionsInput
+  connect?: Prisma.UserWhereUniqueInput
+}
+
+export type UserUpdateOneRequiredWithoutAuthSessionsNestedInput = {
+  create?: Prisma.XOR<Prisma.UserCreateWithoutAuthSessionsInput, Prisma.UserUncheckedCreateWithoutAuthSessionsInput>
+  connectOrCreate?: Prisma.UserCreateOrConnectWithoutAuthSessionsInput
+  upsert?: Prisma.UserUpsertWithoutAuthSessionsInput
+  connect?: Prisma.UserWhereUniqueInput
+  update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutAuthSessionsInput, Prisma.UserUpdateWithoutAuthSessionsInput>, Prisma.UserUncheckedUpdateWithoutAuthSessionsInput>
+}
+
 export type UserCreateNestedOneWithoutOwnedServersInput = {
   create?: Prisma.XOR<Prisma.UserCreateWithoutOwnedServersInput, Prisma.UserUncheckedCreateWithoutOwnedServersInput>
   connectOrCreate?: Prisma.UserCreateOrConnectWithoutOwnedServersInput
@@ -479,6 +500,82 @@ export type UserUpdateOneRequiredWithoutIssuedBansNestedInput = {
   update?: Prisma.XOR<Prisma.XOR<Prisma.UserUpdateToOneWithWhereWithoutIssuedBansInput, Prisma.UserUpdateWithoutIssuedBansInput>, Prisma.UserUncheckedUpdateWithoutIssuedBansInput>
 }
 
+export type UserCreateWithoutAuthSessionsInput = {
+  id?: string
+  email: string
+  username: string
+  passwordHash: string
+  displayName: string
+  avatarUrl?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  ownedServers?: Prisma.ServerCreateNestedManyWithoutOwnerInput
+  memberships?: Prisma.ServerMemberCreateNestedManyWithoutUserInput
+  bans?: Prisma.ServerBanCreateNestedManyWithoutUserInput
+  issuedBans?: Prisma.ServerBanCreateNestedManyWithoutBannedByInput
+}
+
+export type UserUncheckedCreateWithoutAuthSessionsInput = {
+  id?: string
+  email: string
+  username: string
+  passwordHash: string
+  displayName: string
+  avatarUrl?: string | null
+  createdAt?: Date | string
+  updatedAt?: Date | string
+  ownedServers?: Prisma.ServerUncheckedCreateNestedManyWithoutOwnerInput
+  memberships?: Prisma.ServerMemberUncheckedCreateNestedManyWithoutUserInput
+  bans?: Prisma.ServerBanUncheckedCreateNestedManyWithoutUserInput
+  issuedBans?: Prisma.ServerBanUncheckedCreateNestedManyWithoutBannedByInput
+}
+
+export type UserCreateOrConnectWithoutAuthSessionsInput = {
+  where: Prisma.UserWhereUniqueInput
+  create: Prisma.XOR<Prisma.UserCreateWithoutAuthSessionsInput, Prisma.UserUncheckedCreateWithoutAuthSessionsInput>
+}
+
+export type UserUpsertWithoutAuthSessionsInput = {
+  update: Prisma.XOR<Prisma.UserUpdateWithoutAuthSessionsInput, Prisma.UserUncheckedUpdateWithoutAuthSessionsInput>
+  create: Prisma.XOR<Prisma.UserCreateWithoutAuthSessionsInput, Prisma.UserUncheckedCreateWithoutAuthSessionsInput>
+  where?: Prisma.UserWhereInput
+}
+
+export type UserUpdateToOneWithWhereWithoutAuthSessionsInput = {
+  where?: Prisma.UserWhereInput
+  data: Prisma.XOR<Prisma.UserUpdateWithoutAuthSessionsInput, Prisma.UserUncheckedUpdateWithoutAuthSessionsInput>
+}
+
+export type UserUpdateWithoutAuthSessionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  passwordHash?: Prisma.StringFieldUpdateOperationsInput | string
+  displayName?: Prisma.StringFieldUpdateOperationsInput | string
+  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ownedServers?: Prisma.ServerUpdateManyWithoutOwnerNestedInput
+  memberships?: Prisma.ServerMemberUpdateManyWithoutUserNestedInput
+  bans?: Prisma.ServerBanUpdateManyWithoutUserNestedInput
+  issuedBans?: Prisma.ServerBanUpdateManyWithoutBannedByNestedInput
+}
+
+export type UserUncheckedUpdateWithoutAuthSessionsInput = {
+  id?: Prisma.StringFieldUpdateOperationsInput | string
+  email?: Prisma.StringFieldUpdateOperationsInput | string
+  username?: Prisma.StringFieldUpdateOperationsInput | string
+  passwordHash?: Prisma.StringFieldUpdateOperationsInput | string
+  displayName?: Prisma.StringFieldUpdateOperationsInput | string
+  avatarUrl?: Prisma.NullableStringFieldUpdateOperationsInput | string | null
+  createdAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  updatedAt?: Prisma.DateTimeFieldUpdateOperationsInput | Date | string
+  ownedServers?: Prisma.ServerUncheckedUpdateManyWithoutOwnerNestedInput
+  memberships?: Prisma.ServerMemberUncheckedUpdateManyWithoutUserNestedInput
+  bans?: Prisma.ServerBanUncheckedUpdateManyWithoutUserNestedInput
+  issuedBans?: Prisma.ServerBanUncheckedUpdateManyWithoutBannedByNestedInput
+}
+
 export type UserCreateWithoutOwnedServersInput = {
   id?: string
   email: string
@@ -491,6 +588,7 @@ export type UserCreateWithoutOwnedServersInput = {
   memberships?: Prisma.ServerMemberCreateNestedManyWithoutUserInput
   bans?: Prisma.ServerBanCreateNestedManyWithoutUserInput
   issuedBans?: Prisma.ServerBanCreateNestedManyWithoutBannedByInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutOwnedServersInput = {
@@ -505,6 +603,7 @@ export type UserUncheckedCreateWithoutOwnedServersInput = {
   memberships?: Prisma.ServerMemberUncheckedCreateNestedManyWithoutUserInput
   bans?: Prisma.ServerBanUncheckedCreateNestedManyWithoutUserInput
   issuedBans?: Prisma.ServerBanUncheckedCreateNestedManyWithoutBannedByInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutOwnedServersInput = {
@@ -535,6 +634,7 @@ export type UserUpdateWithoutOwnedServersInput = {
   memberships?: Prisma.ServerMemberUpdateManyWithoutUserNestedInput
   bans?: Prisma.ServerBanUpdateManyWithoutUserNestedInput
   issuedBans?: Prisma.ServerBanUpdateManyWithoutBannedByNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutOwnedServersInput = {
@@ -549,6 +649,7 @@ export type UserUncheckedUpdateWithoutOwnedServersInput = {
   memberships?: Prisma.ServerMemberUncheckedUpdateManyWithoutUserNestedInput
   bans?: Prisma.ServerBanUncheckedUpdateManyWithoutUserNestedInput
   issuedBans?: Prisma.ServerBanUncheckedUpdateManyWithoutBannedByNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateWithoutMembershipsInput = {
@@ -563,6 +664,7 @@ export type UserCreateWithoutMembershipsInput = {
   ownedServers?: Prisma.ServerCreateNestedManyWithoutOwnerInput
   bans?: Prisma.ServerBanCreateNestedManyWithoutUserInput
   issuedBans?: Prisma.ServerBanCreateNestedManyWithoutBannedByInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutMembershipsInput = {
@@ -577,6 +679,7 @@ export type UserUncheckedCreateWithoutMembershipsInput = {
   ownedServers?: Prisma.ServerUncheckedCreateNestedManyWithoutOwnerInput
   bans?: Prisma.ServerBanUncheckedCreateNestedManyWithoutUserInput
   issuedBans?: Prisma.ServerBanUncheckedCreateNestedManyWithoutBannedByInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutMembershipsInput = {
@@ -607,6 +710,7 @@ export type UserUpdateWithoutMembershipsInput = {
   ownedServers?: Prisma.ServerUpdateManyWithoutOwnerNestedInput
   bans?: Prisma.ServerBanUpdateManyWithoutUserNestedInput
   issuedBans?: Prisma.ServerBanUpdateManyWithoutBannedByNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutMembershipsInput = {
@@ -621,6 +725,7 @@ export type UserUncheckedUpdateWithoutMembershipsInput = {
   ownedServers?: Prisma.ServerUncheckedUpdateManyWithoutOwnerNestedInput
   bans?: Prisma.ServerBanUncheckedUpdateManyWithoutUserNestedInput
   issuedBans?: Prisma.ServerBanUncheckedUpdateManyWithoutBannedByNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserCreateWithoutBansInput = {
@@ -635,6 +740,7 @@ export type UserCreateWithoutBansInput = {
   ownedServers?: Prisma.ServerCreateNestedManyWithoutOwnerInput
   memberships?: Prisma.ServerMemberCreateNestedManyWithoutUserInput
   issuedBans?: Prisma.ServerBanCreateNestedManyWithoutBannedByInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutBansInput = {
@@ -649,6 +755,7 @@ export type UserUncheckedCreateWithoutBansInput = {
   ownedServers?: Prisma.ServerUncheckedCreateNestedManyWithoutOwnerInput
   memberships?: Prisma.ServerMemberUncheckedCreateNestedManyWithoutUserInput
   issuedBans?: Prisma.ServerBanUncheckedCreateNestedManyWithoutBannedByInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutBansInput = {
@@ -668,6 +775,7 @@ export type UserCreateWithoutIssuedBansInput = {
   ownedServers?: Prisma.ServerCreateNestedManyWithoutOwnerInput
   memberships?: Prisma.ServerMemberCreateNestedManyWithoutUserInput
   bans?: Prisma.ServerBanCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionCreateNestedManyWithoutUserInput
 }
 
 export type UserUncheckedCreateWithoutIssuedBansInput = {
@@ -682,6 +790,7 @@ export type UserUncheckedCreateWithoutIssuedBansInput = {
   ownedServers?: Prisma.ServerUncheckedCreateNestedManyWithoutOwnerInput
   memberships?: Prisma.ServerMemberUncheckedCreateNestedManyWithoutUserInput
   bans?: Prisma.ServerBanUncheckedCreateNestedManyWithoutUserInput
+  authSessions?: Prisma.AuthSessionUncheckedCreateNestedManyWithoutUserInput
 }
 
 export type UserCreateOrConnectWithoutIssuedBansInput = {
@@ -712,6 +821,7 @@ export type UserUpdateWithoutBansInput = {
   ownedServers?: Prisma.ServerUpdateManyWithoutOwnerNestedInput
   memberships?: Prisma.ServerMemberUpdateManyWithoutUserNestedInput
   issuedBans?: Prisma.ServerBanUpdateManyWithoutBannedByNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutBansInput = {
@@ -726,6 +836,7 @@ export type UserUncheckedUpdateWithoutBansInput = {
   ownedServers?: Prisma.ServerUncheckedUpdateManyWithoutOwnerNestedInput
   memberships?: Prisma.ServerMemberUncheckedUpdateManyWithoutUserNestedInput
   issuedBans?: Prisma.ServerBanUncheckedUpdateManyWithoutBannedByNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 export type UserUpsertWithoutIssuedBansInput = {
@@ -751,6 +862,7 @@ export type UserUpdateWithoutIssuedBansInput = {
   ownedServers?: Prisma.ServerUpdateManyWithoutOwnerNestedInput
   memberships?: Prisma.ServerMemberUpdateManyWithoutUserNestedInput
   bans?: Prisma.ServerBanUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUpdateManyWithoutUserNestedInput
 }
 
 export type UserUncheckedUpdateWithoutIssuedBansInput = {
@@ -765,6 +877,7 @@ export type UserUncheckedUpdateWithoutIssuedBansInput = {
   ownedServers?: Prisma.ServerUncheckedUpdateManyWithoutOwnerNestedInput
   memberships?: Prisma.ServerMemberUncheckedUpdateManyWithoutUserNestedInput
   bans?: Prisma.ServerBanUncheckedUpdateManyWithoutUserNestedInput
+  authSessions?: Prisma.AuthSessionUncheckedUpdateManyWithoutUserNestedInput
 }
 
 
@@ -777,6 +890,7 @@ export type UserCountOutputType = {
   memberships: number
   bans: number
   issuedBans: number
+  authSessions: number
 }
 
 export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
@@ -784,6 +898,7 @@ export type UserCountOutputTypeSelect<ExtArgs extends runtime.Types.Extensions.I
   memberships?: boolean | UserCountOutputTypeCountMembershipsArgs
   bans?: boolean | UserCountOutputTypeCountBansArgs
   issuedBans?: boolean | UserCountOutputTypeCountIssuedBansArgs
+  authSessions?: boolean | UserCountOutputTypeCountAuthSessionsArgs
 }
 
 /**
@@ -824,6 +939,13 @@ export type UserCountOutputTypeCountIssuedBansArgs<ExtArgs extends runtime.Types
   where?: Prisma.ServerBanWhereInput
 }
 
+/**
+ * UserCountOutputType without action
+ */
+export type UserCountOutputTypeCountAuthSessionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  where?: Prisma.AuthSessionWhereInput
+}
+
 
 export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = runtime.Types.Extensions.GetSelect<{
   id?: boolean
@@ -838,6 +960,7 @@ export type UserSelect<ExtArgs extends runtime.Types.Extensions.InternalArgs = r
   memberships?: boolean | Prisma.User$membershipsArgs<ExtArgs>
   bans?: boolean | Prisma.User$bansArgs<ExtArgs>
   issuedBans?: boolean | Prisma.User$issuedBansArgs<ExtArgs>
+  authSessions?: boolean | Prisma.User$authSessionsArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }, ExtArgs["result"]["user"]>
 
@@ -860,6 +983,7 @@ export type UserInclude<ExtArgs extends runtime.Types.Extensions.InternalArgs = 
   memberships?: boolean | Prisma.User$membershipsArgs<ExtArgs>
   bans?: boolean | Prisma.User$bansArgs<ExtArgs>
   issuedBans?: boolean | Prisma.User$issuedBansArgs<ExtArgs>
+  authSessions?: boolean | Prisma.User$authSessionsArgs<ExtArgs>
   _count?: boolean | Prisma.UserCountOutputTypeDefaultArgs<ExtArgs>
 }
 
@@ -870,6 +994,7 @@ export type $UserPayload<ExtArgs extends runtime.Types.Extensions.InternalArgs =
     memberships: Prisma.$ServerMemberPayload<ExtArgs>[]
     bans: Prisma.$ServerBanPayload<ExtArgs>[]
     issuedBans: Prisma.$ServerBanPayload<ExtArgs>[]
+    authSessions: Prisma.$AuthSessionPayload<ExtArgs>[]
   }
   scalars: runtime.Types.Extensions.GetPayloadResult<{
     id: string
@@ -1224,6 +1349,7 @@ export interface Prisma__UserClient<T, Null = never, ExtArgs extends runtime.Typ
   memberships<T extends Prisma.User$membershipsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$membershipsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ServerMemberPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   bans<T extends Prisma.User$bansArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$bansArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ServerBanPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   issuedBans<T extends Prisma.User$issuedBansArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$issuedBansArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$ServerBanPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
+  authSessions<T extends Prisma.User$authSessionsArgs<ExtArgs> = {}>(args?: Prisma.Subset<T, Prisma.User$authSessionsArgs<ExtArgs>>): Prisma.PrismaPromise<runtime.Types.Result.GetResult<Prisma.$AuthSessionPayload<ExtArgs>, T, "findMany", GlobalOmitOptions> | Null>
   /**
    * Attaches callbacks for the resolution and/or rejection of the Promise.
    * @param onfulfilled The callback to execute when the Promise is resolved.
@@ -1702,6 +1828,30 @@ export type User$issuedBansArgs<ExtArgs extends runtime.Types.Extensions.Interna
   take?: number
   skip?: number
   distinct?: Prisma.ServerBanScalarFieldEnum | Prisma.ServerBanScalarFieldEnum[]
+}
+
+/**
+ * User.authSessions
+ */
+export type User$authSessionsArgs<ExtArgs extends runtime.Types.Extensions.InternalArgs = runtime.Types.Extensions.DefaultArgs> = {
+  /**
+   * Select specific fields to fetch from the AuthSession
+   */
+  select?: Prisma.AuthSessionSelect<ExtArgs> | null
+  /**
+   * Omit specific fields from the AuthSession
+   */
+  omit?: Prisma.AuthSessionOmit<ExtArgs> | null
+  /**
+   * Choose, which related nodes to fetch as well
+   */
+  include?: Prisma.AuthSessionInclude<ExtArgs> | null
+  where?: Prisma.AuthSessionWhereInput
+  orderBy?: Prisma.AuthSessionOrderByWithRelationInput | Prisma.AuthSessionOrderByWithRelationInput[]
+  cursor?: Prisma.AuthSessionWhereUniqueInput
+  take?: number
+  skip?: number
+  distinct?: Prisma.AuthSessionScalarFieldEnum | Prisma.AuthSessionScalarFieldEnum[]
 }
 
 /**

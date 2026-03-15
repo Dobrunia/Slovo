@@ -1,7 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {
+  DEFAULT_GRAPHQL_PATH,
+  DEFAULT_SERVER_PORT,
+  DEFAULT_SERVER_SERVICE_NAME,
+  MAX_CHANNELS_PER_SERVER,
+  MAX_SERVERS_PER_OWNER,
+} from "../src/config/constants.js";
 import type { DataLayer } from "../src/data/prisma.js";
 import { createGraphqlServer } from "../src/graphql/server.js";
+
+const GRAPHQL_TEST_URL = new URL(
+  DEFAULT_GRAPHQL_PATH,
+  `http://localhost:${DEFAULT_SERVER_PORT}`,
+).toString();
 
 test("should expose the health query through GraphQL Yoga and StrictQL", async () => {
   /**
@@ -10,7 +22,7 @@ test("should expose the health query through GraphQL Yoga and StrictQL", async (
    * Граничный случай — минимальный data layer без настоящего подключения к базе, так как health-query не должна зависеть от Prisma-запросов.
    */
   const previousGraphqlPath = process.env.GRAPHQL_PATH;
-  process.env.GRAPHQL_PATH = "/graphql";
+  process.env.GRAPHQL_PATH = DEFAULT_GRAPHQL_PATH;
 
   const dataLayer = {
     prisma: {
@@ -22,7 +34,7 @@ test("should expose the health query through GraphQL Yoga and StrictQL", async (
   });
 
   const response = await yoga.fetch(
-    new Request("http://localhost:4000/graphql", {
+    new Request(GRAPHQL_TEST_URL, {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -69,11 +81,11 @@ test("should expose the health query through GraphQL Yoga and StrictQL", async (
 
   assert.deepEqual(payload.data.health, {
     status: "ok",
-    service: "slovo-server",
-    graphqlPath: "/graphql",
+    service: DEFAULT_SERVER_SERVICE_NAME,
+    graphqlPath: DEFAULT_GRAPHQL_PATH,
     limits: {
-      maxServersPerOwner: 2,
-      maxChannelsPerServer: 5,
+      maxServersPerOwner: MAX_SERVERS_PER_OWNER,
+      maxChannelsPerServer: MAX_CHANNELS_PER_SERVER,
     },
   });
 });

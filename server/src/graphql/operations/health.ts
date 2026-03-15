@@ -2,6 +2,7 @@ import { z } from "zod";
 import { publicPolicy, query } from "strictql";
 import {
   DEFAULT_GRAPHQL_PATH,
+  DEFAULT_SERVER_SERVICE_NAME,
   MAX_CHANNELS_PER_SERVER,
   MAX_SERVERS_PER_OWNER,
 } from "../../config/constants.js";
@@ -37,7 +38,7 @@ export const healthQuery = query({
 
     return {
       status: "ok",
-      service: "slovo-server",
+      service: DEFAULT_SERVER_SERVICE_NAME,
       graphqlPath,
       limits: {
         maxServersPerOwner: MAX_SERVERS_PER_OWNER,
