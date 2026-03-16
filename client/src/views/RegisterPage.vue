@@ -5,7 +5,6 @@
         <DbrInput
           v-model="form.email"
           label="Email"
-          autocomplete="email"
           required
         />
 
@@ -13,7 +12,6 @@
           v-model="form.username"
           label="Username"
           icon-position="left"
-          autocomplete="username"
           required
         >
           <template #icon>@</template>
@@ -22,7 +20,6 @@
         <DbrInput
           v-model="form.displayName"
           label="Отображаемое имя"
-          autocomplete="nickname"
           required
         />
 
@@ -30,7 +27,6 @@
           v-model="form.password"
           label="Пароль"
           type="password"
-          autocomplete="new-password"
           required
         />
       </div>

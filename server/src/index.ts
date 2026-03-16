@@ -5,7 +5,11 @@ import {
   DEFAULT_GRAPHQL_PATH,
   DEFAULT_SERVER_PORT,
 } from "./config/constants.js";
-import { createDataLayer, disposeDataLayer } from "./data/prisma.js";
+import {
+  connectDataLayer,
+  createDataLayer,
+  disposeDataLayer,
+} from "./data/prisma.js";
 import { createGraphqlServer } from "./graphql/server.js";
 import { createSlovoRealtimeServer } from "./realtime/runtime.js";
 
@@ -20,6 +24,10 @@ async function startServer() {
     : DEFAULT_GRAPHQL_PATH;
   const databaseUrl = process.env.DATABASE_URL?.trim() || DEFAULT_DATABASE_URL;
   const dataLayer = createDataLayer(databaseUrl);
+
+  await connectDataLayer(dataLayer);
+  process.stdout.write("Connected to MySQL database\n");
+
   const yoga = createGraphqlServer({
     dataLayer,
   });

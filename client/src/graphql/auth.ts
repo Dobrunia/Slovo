@@ -10,41 +10,18 @@ import type {
   RegisterInput,
   RegisterResult,
 } from "../types/auth";
-import type {
-  GraphqlRequestPayload,
-  GraphqlResponse,
-} from "../types/graphql";
+import type { GraphqlResponse } from "../types/graphql";
 
 const AUTH_USER_FIELDS = `
   id
   email
   username
   displayName
-`;
-
-const REGISTER_MUTATION = `
-  mutation Register($input: RegisterInput!) {
-    register(input: $input) {
-      user {
-        ${AUTH_USER_FIELDS}
-      }
-    }
-  }
-`;
-
-const LOGIN_MUTATION = `
-  mutation Login($input: LoginInput!) {
-    login(input: $input) {
-      sessionToken
-      user {
-        ${AUTH_USER_FIELDS}
-      }
-    }
-  }
+  avatarUrl
 `;
 
 const ME_QUERY = `
-  query Me {
+  query {
     me {
       ${AUTH_USER_FIELDS}
     }
@@ -77,10 +54,7 @@ export function createAuthApiClient(options: CreateAuthApiClientOptions = {}): A
   const graphqlUrl = options.graphqlUrl ?? DEFAULT_CLIENT_GRAPHQL_URL;
   const fetchImplementation = options.fetchImplementation ?? fetch;
 
-  async function request<TData, TVariables extends Record<string, unknown>>(
-    payload: GraphqlRequestPayload<TVariables>,
-    sessionToken?: string,
-  ): Promise<TData> {
+  async function request<TData>(query: string, sessionToken?: string): Promise<TData> {
     const response = await fetchImplementation(graphqlUrl, {
       method: "POST",
       headers: {
@@ -92,7 +66,9 @@ export function createAuthApiClient(options: CreateAuthApiClientOptions = {}): A
             }
           : {}),
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        query,
+      }),
     });
 
     const result = (await response.json()) as GraphqlResponse<TData>;
@@ -115,37 +91,68 @@ export function createAuthApiClient(options: CreateAuthApiClientOptions = {}): A
 
   return {
     async register(input) {
-      const data = await request<{ register: RegisterResult }, { input: RegisterInput }>({
-        query: REGISTER_MUTATION,
-        variables: {
-          input,
-        },
-      });
-
+      const data = await request<{ register: RegisterResult }>(buildRegisterMutation(input));
       return data.register;
     },
 
     async login(input) {
-      const data = await request<{ login: AuthSessionResult }, { input: LoginInput }>({
-        query: LOGIN_MUTATION,
-        variables: {
-          input,
-        },
-      });
-
+      const data = await request<{ login: AuthSessionResult }>(buildLoginMutation(input));
       return data.login;
     },
 
     async me(sessionToken) {
-      const data = await request<{ me: ClientUser }, Record<string, never>>(
-        {
-          query: ME_QUERY,
-          variables: {},
-        },
-        sessionToken,
-      );
-
+      const data = await request<{ me: ClientUser }>(ME_QUERY, sessionToken);
       return data.me;
     },
   };
+}
+
+/**
+ * Строит GraphQL-мутацию регистрации в том виде, который ожидает StrictQL runtime.
+ */
+function buildRegisterMutation(input: RegisterInput): string {
+  return `
+    mutation {
+      register(
+        input: {
+          email: ${toGraphqlString(input.email)}
+          username: ${toGraphqlString(input.username)}
+          password: ${toGraphqlString(input.password)}
+          displayName: ${toGraphqlString(input.displayName)}
+        }
+      ) {
+        user {
+          ${AUTH_USER_FIELDS}
+        }
+      }
+    }
+  `;
+}
+
+/**
+ * Строит GraphQL-мутацию логина в том виде, который ожидает StrictQL runtime.
+ */
+function buildLoginMutation(input: LoginInput): string {
+  return `
+    mutation {
+      login(
+        input: {
+          email: ${toGraphqlString(input.email)}
+          password: ${toGraphqlString(input.password)}
+        }
+      ) {
+        sessionToken
+        user {
+          ${AUTH_USER_FIELDS}
+        }
+      }
+    }
+  `;
+}
+
+/**
+ * Безопасно сериализует строку для inline GraphQL-литерала.
+ */
+function toGraphqlString(value: string): string {
+  return JSON.stringify(value);
 }

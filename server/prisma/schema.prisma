@@ -94,3 +94,7 @@ model ServerBan {
   @@unique([serverId, userId])
   @@index([bannedByUserId])
 }
+generator client_js {
+  provider = "prisma-client-js"
+  engineType = "library"
+}

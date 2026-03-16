@@ -15,7 +15,6 @@
     "prisma:validate": "prisma validate"
   },
   "dependencies": {
-    "@prisma/adapter-mariadb": "7.5.0",
     "@prisma/client": "7.5.0",
     "dobrunia-liverail-contracts": "1.0.0",
     "dobrunia-liverail-server": "1.0.0",

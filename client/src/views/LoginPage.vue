@@ -5,7 +5,6 @@
         <DbrInput
           v-model="form.email"
           label="Email"
-          autocomplete="email"
           required
         />
 
@@ -13,7 +12,6 @@
           v-model="form.password"
           label="Пароль"
           type="password"
-          autocomplete="current-password"
           required
         />
       </div>

@@ -1,6 +1,4 @@
-import { PrismaMariaDb } from "@prisma/adapter-mariadb";
-import { DEFAULT_DATABASE_PORT } from "../config/constants.js";
-import { PrismaClient } from "../generated/prisma/client.js";
+import { PrismaClient } from "@prisma/client";
 
 /**
  * Общий серверный data layer, отделенный от transport-слоя.
@@ -9,32 +7,12 @@ export type DataLayer = {
   prisma: PrismaClient;
 };
 
-type GlobalWithPrisma = typeof globalThis & {
-  __slovoPrismaClient__?: PrismaClient;
-};
-
 /**
- * Создает новый Prisma client с явной привязкой к серверной конфигурации.
+ * Создает обычный Prisma client для единственного server instance.
  */
 export function createPrismaClient(databaseUrl: string): PrismaClient {
-  const adapter = createMariaDbAdapter(databaseUrl);
-
-  return new PrismaClient({
-    adapter,
-  });
-}
-
-/**
- * Возвращает singleton Prisma client для локальной разработки и тестов.
- */
-export function getPrismaClient(databaseUrl: string): PrismaClient {
-  const globalState = globalThis as GlobalWithPrisma;
-
-  if (!globalState.__slovoPrismaClient__) {
-    globalState.__slovoPrismaClient__ = createPrismaClient(databaseUrl);
-  }
-
-  return globalState.__slovoPrismaClient__;
+  process.env.DATABASE_URL = databaseUrl;
+  return new PrismaClient();
 }
 
 /**
@@ -42,8 +20,15 @@ export function getPrismaClient(databaseUrl: string): PrismaClient {
  */
 export function createDataLayer(databaseUrl: string): DataLayer {
   return {
-    prisma: getPrismaClient(databaseUrl),
+    prisma: createPrismaClient(databaseUrl),
   };
+}
+
+/**
+ * Явно открывает соединение data layer на старте сервера.
+ */
+export async function connectDataLayer(dataLayer: DataLayer): Promise<void> {
+  await dataLayer.prisma.$connect();
 }
 
 /**
@@ -51,28 +36,4 @@ export function createDataLayer(databaseUrl: string): DataLayer {
  */
 export async function disposeDataLayer(dataLayer: DataLayer): Promise<void> {
   await dataLayer.prisma.$disconnect();
-}
-
-/**
- * Преобразует стандартный MySQL URL в конфигурацию MariaDB adapter для Prisma 7.
- */
-function createMariaDbAdapter(databaseUrl: string): PrismaMariaDb {
-  const parsedUrl = new URL(databaseUrl);
-  const database = parsedUrl.pathname.replace(/^\//u, "");
-
-  if (parsedUrl.protocol !== "mysql:") {
-    throw new Error("DATABASE_URL должен использовать протокол mysql://.");
-  }
-
-  if (!database) {
-    throw new Error("DATABASE_URL должен содержать имя базы данных.");
-  }
-
-  return new PrismaMariaDb({
-    host: parsedUrl.hostname,
-    port: parsedUrl.port ? Number(parsedUrl.port) : DEFAULT_DATABASE_PORT,
-    user: decodeURIComponent(parsedUrl.username),
-    password: decodeURIComponent(parsedUrl.password),
-    database,
-  });
 }
