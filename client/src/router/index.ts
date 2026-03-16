@@ -2,13 +2,15 @@ import { createRouter, createWebHistory } from "vue-router";
 import {
   APP_HOME_ROUTE_PATH,
   DEFAULT_CLIENT_APP_TITLE,
+  ROOT_ROUTE_PATH,
   LOGIN_ROUTE_PATH,
   REGISTER_ROUTE_PATH,
-  ROOT_ROUTE_PATH,
 } from "../constants";
+import { resolveRouteAccess } from "./guards";
 import { pinia } from "../stores/pinia";
 import { useAuthStore } from "../stores/auth";
 import AppHomePage from "../views/AppHomePage.vue";
+import LandingPage from "../views/LandingPage.vue";
 import LoginPage from "../views/LoginPage.vue";
 import RegisterPage from "../views/RegisterPage.vue";
 
@@ -20,9 +22,11 @@ export const router = createRouter({
   routes: [
     {
       path: ROOT_ROUTE_PATH,
-      redirect: () => {
-        const authStore = useAuthStore(pinia);
-        return authStore.sessionToken ? APP_HOME_ROUTE_PATH : LOGIN_ROUTE_PATH;
+      component: LandingPage,
+      meta: {
+        guestOnly: true,
+        guestLayout: "landing",
+        title: DEFAULT_CLIENT_APP_TITLE,
       },
     },
     {
@@ -30,6 +34,7 @@ export const router = createRouter({
       component: LoginPage,
       meta: {
         guestOnly: true,
+        guestLayout: "auth",
         title: "Вход",
       },
     },
@@ -38,6 +43,7 @@ export const router = createRouter({
       component: RegisterPage,
       meta: {
         guestOnly: true,
+        guestLayout: "auth",
         title: "Регистрация",
       },
     },
@@ -59,13 +65,5 @@ router.beforeEach(async (to) => {
     await authStore.initialize();
   }
 
-  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
-    return LOGIN_ROUTE_PATH;
-  }
-
-  if (to.meta.guestOnly && authStore.isAuthenticated) {
-    return APP_HOME_ROUTE_PATH;
-  }
-
-  return true;
+  return resolveRouteAccess(to.meta, authStore.isAuthenticated);
 });

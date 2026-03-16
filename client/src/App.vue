@@ -1,6 +1,9 @@
 <template>
   <main class="app-shell dbru-root dbru-theme-sketch">
-    <div v-if="isGuestRoute" class="auth-shell">
+    <div
+      v-if="isGuestRoute"
+      :class="guestShellClassName"
+    >
       <RouterView />
     </div>
 
@@ -26,6 +29,15 @@ const route = useRoute();
  * Определяет, находится ли пользователь на гостевой auth-странице.
  */
 const isGuestRoute = computed(() => Boolean(route.meta.guestOnly));
+
+/**
+ * Вычисляет класс layout-контейнера для текущего гостевого экрана.
+ */
+const guestShellClassName = computed(() =>
+  route.meta.guestLayout === "landing"
+    ? "guest-shell guest-shell--landing"
+    : "guest-shell guest-shell--auth",
+);
 </script>
 
 <style scoped>
@@ -35,14 +47,33 @@ const isGuestRoute = computed(() => Boolean(route.meta.guestOnly));
   color: var(--dbru-color-text);
 }
 
-.auth-shell {
-  min-height: 100dvh;
+.guest-shell {
+  height: 100dvh;
   display: grid;
   place-items: center;
   padding: var(--dbru-space-6);
+  box-sizing: border-box;
+}
+
+.guest-shell--auth {
+  overflow: auto;
   background:
     url("./assets/auth_back.png") center center / cover no-repeat,
     var(--dbru-color-bg);
+}
+
+.guest-shell--landing {
+  overflow: hidden;
+  background:
+    url("./assets/init_bg.png") center center / cover no-repeat,
+    var(--dbru-color-bg);
+}
+
+:global(html),
+:global(body),
+:global(#app) {
+  min-height: 100%;
+  margin: 0;
 }
 
 .app-shell__content {
@@ -58,7 +89,7 @@ const isGuestRoute = computed(() => Boolean(route.meta.guestOnly));
 }
 
 @media (max-width: 640px) {
-  .auth-shell {
+  .guest-shell {
     padding: var(--dbru-space-4);
   }
 
