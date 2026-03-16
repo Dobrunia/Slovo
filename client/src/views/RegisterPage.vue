@@ -1,51 +1,68 @@
 <template>
-  <section class="register-page">
-    <AuthFormPanel
-      eyebrow="Регистрация"
-      title="Новый аккаунт Slovo"
-      description="Создайте учетную запись и затем войдите в приложение."
-      :error-message="errorMessage"
-      footer-text="Уже есть аккаунт?"
-      footer-link-label="Перейти ко входу"
-      :footer-to="LOGIN_ROUTE_PATH"
-      @submit="handleSubmit"
+  <AuthFormPanel title="Регистрация">
+    <form class="register-page__form" @submit.prevent="handleSubmit">
+      <div class="register-page__fields">
+        <DbrInput
+          v-model="form.email"
+          label="Email"
+          autocomplete="email"
+          required
+        />
+
+        <DbrInput
+          v-model="form.username"
+          label="Username"
+          icon-position="left"
+          autocomplete="username"
+          required
+        >
+          <template #icon>@</template>
+        </DbrInput>
+
+        <DbrInput
+          v-model="form.displayName"
+          label="Отображаемое имя"
+          autocomplete="nickname"
+          required
+        />
+
+        <DbrInput
+          v-model="form.password"
+          label="Пароль"
+          type="password"
+          autocomplete="new-password"
+          required
+        />
+      </div>
+
+      <p v-if="errorMessage" class="register-page__error dbru-text-sm">
+        {{ errorMessage }}
+      </p>
+
+      <DbrButton
+        class="register-page__primary-action"
+        :disabled="authStore.isSubmitting"
+        :native-type="'submit'"
+      >
+        {{ submitLabel }}
+      </DbrButton>
+    </form>
+
+    <div class="register-page__divider" aria-hidden="true">
+      <span class="register-page__divider-line"></span>
+      <span class="register-page__divider-text dbru-text-sm dbru-text-muted">Уже есть аккаунт?</span>
+      <span class="register-page__divider-line"></span>
+    </div>
+
+    <DbrButton
+      class="register-page__secondary-action"
+      variant="ghost"
+      :native-type="'button'"
+      @click="goToLogin"
     >
-      <DbrInput
-        v-model="form.email"
-        label="Email"
-        autocomplete="email"
-        required
-      />
-
-      <DbrInput
-        v-model="form.username"
-        label="Username"
-        autocomplete="username"
-        required
-      />
-
-      <DbrInput
-        v-model="form.displayName"
-        label="Отображаемое имя"
-        autocomplete="nickname"
-        required
-      />
-
-      <DbrInput
-        v-model="form.password"
-        label="Пароль"
-        type="password"
-        autocomplete="new-password"
-        required
-      />
-
-      <template #actions>
-        <DbrButton :disabled="authStore.isSubmitting" :native-type="'submit'">
-          {{ submitLabel }}
-        </DbrButton>
-      </template>
-    </AuthFormPanel>
-  </section>
+      Войти
+    </DbrButton>
+  </AuthFormPanel>
 </template>
 
 <script setup lang="ts">
@@ -68,17 +85,17 @@ const form = reactive<RegisterFormModel>({
 });
 
 /**
- * Текст кнопки отправки формы регистрации.
+ * Текст основной кнопки регистрации.
  */
 const submitLabel = computed(() => (authStore.isSubmitting ? "Создаем..." : "Создать аккаунт"));
 
 /**
- * Текущее сообщение об ошибке auth store.
+ * Сообщение об ошибке регистрации.
  */
 const errorMessage = computed(() => authStore.errorMessage);
 
 /**
- * Отправляет форму регистрации и переводит пользователя на страницу логина.
+ * Выполняет регистрацию и переводит пользователя к экрану входа.
  */
 async function handleSubmit(): Promise<void> {
   await authStore.register({
@@ -90,10 +107,52 @@ async function handleSubmit(): Promise<void> {
 
   await router.replace(LOGIN_ROUTE_PATH);
 }
+
+/**
+ * Переводит пользователя на экран входа.
+ */
+async function goToLogin(): Promise<void> {
+  await router.replace(LOGIN_ROUTE_PATH);
+}
 </script>
 
 <style scoped>
-.register-page {
+.register-page__form {
   display: grid;
+  gap: var(--dbru-space-4);
+}
+
+.register-page__fields {
+  display: grid;
+  gap: var(--dbru-space-4);
+}
+
+.register-page__primary-action {
+  width: 100%;
+}
+
+.register-page__divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--dbru-space-3);
+  align-items: center;
+}
+
+.register-page__divider-line {
+  height: 1px;
+  background: var(--dbru-color-border);
+}
+
+.register-page__divider-text {
+  white-space: nowrap;
+}
+
+.register-page__secondary-action {
+  width: 100%;
+}
+
+.register-page__error {
+  margin: 0;
+  color: var(--dbru-color-error);
 }
 </style>

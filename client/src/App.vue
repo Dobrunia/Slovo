@@ -1,43 +1,56 @@
 <template>
   <main class="app-shell dbru-root dbru-theme-sketch">
-    <section class="app-shell__grid">
-      <AppSidebarPanel />
+    <div v-if="isGuestRoute" class="auth-shell">
+      <RouterView />
+    </div>
 
-      <section class="app-shell__content dbru-surface">
-        <AppHeaderBar />
+    <section v-else class="app-shell__content dbru-surface">
+      <AppHeaderBar />
 
-        <div class="app-shell__body">
-          <RouterView />
-        </div>
-      </section>
+      <div class="app-shell__body">
+        <RouterView />
+      </div>
     </section>
   </main>
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
+import { useRoute } from "vue-router";
 import { RouterView } from "vue-router";
 import AppHeaderBar from "./components/layout/AppHeaderBar.vue";
-import AppSidebarPanel from "./components/layout/AppSidebarPanel.vue";
+
+const route = useRoute();
+
+/**
+ * Определяет, находится ли пользователь на гостевой auth-странице.
+ */
+const isGuestRoute = computed(() => Boolean(route.meta.guestOnly));
 </script>
 
 <style scoped>
 .app-shell {
-  min-height: 100vh;
-  padding: var(--dbru-space-6);
+  min-height: 100dvh;
   background: var(--dbru-color-bg);
   color: var(--dbru-color-text);
 }
 
-.app-shell__grid {
+.auth-shell {
+  min-height: 100dvh;
   display: grid;
-  gap: var(--dbru-space-6);
-  align-items: start;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  place-items: center;
+  padding: var(--dbru-space-6);
+  background:
+    url("./assets/auth_back.png") center center / cover no-repeat,
+    var(--dbru-color-bg);
 }
 
 .app-shell__content {
+  min-height: 100vh;
   overflow: hidden;
   border-radius: var(--dbru-radius-md);
+  margin: 0 auto;
+  width: min(100%, 72rem);
 }
 
 .app-shell__body {
@@ -45,7 +58,7 @@ import AppSidebarPanel from "./components/layout/AppSidebarPanel.vue";
 }
 
 @media (max-width: 640px) {
-  .app-shell {
+  .auth-shell {
     padding: var(--dbru-space-4);
   }
 

@@ -1,37 +1,51 @@
 <template>
-  <section class="login-page">
-    <AuthFormPanel
-      eyebrow="Авторизация"
-      title="Вход в Slovo"
-      description="Используйте email и пароль существующего пользователя."
-      :error-message="errorMessage"
-      footer-text="Еще нет аккаунта?"
-      footer-link-label="Создать аккаунт"
-      :footer-to="REGISTER_ROUTE_PATH"
-      @submit="handleSubmit"
+  <AuthFormPanel title="Вход">
+    <form class="login-page__form" @submit.prevent="handleSubmit">
+      <div class="login-page__fields">
+        <DbrInput
+          v-model="form.email"
+          label="Email"
+          autocomplete="email"
+          required
+        />
+
+        <DbrInput
+          v-model="form.password"
+          label="Пароль"
+          type="password"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+
+      <p v-if="errorMessage" class="login-page__error dbru-text-sm">
+        {{ errorMessage }}
+      </p>
+
+      <DbrButton
+        class="login-page__primary-action"
+        :disabled="authStore.isSubmitting"
+        :native-type="'submit'"
+      >
+        {{ submitLabel }}
+      </DbrButton>
+    </form>
+
+    <div class="login-page__divider" aria-hidden="true">
+      <span class="login-page__divider-line"></span>
+      <span class="login-page__divider-text dbru-text-sm dbru-text-muted">Нет аккаунта?</span>
+      <span class="login-page__divider-line"></span>
+    </div>
+
+    <DbrButton
+      class="login-page__secondary-action"
+      variant="ghost"
+      :native-type="'button'"
+      @click="goToRegister"
     >
-      <DbrInput
-        v-model="form.email"
-        label="Email"
-        autocomplete="email"
-        required
-      />
-
-      <DbrInput
-        v-model="form.password"
-        label="Пароль"
-        type="password"
-        autocomplete="current-password"
-        required
-      />
-
-      <template #actions>
-        <DbrButton :disabled="authStore.isSubmitting" :native-type="'submit'">
-          {{ submitLabel }}
-        </DbrButton>
-      </template>
-    </AuthFormPanel>
-  </section>
+      Создать аккаунт
+    </DbrButton>
+  </AuthFormPanel>
 </template>
 
 <script setup lang="ts">
@@ -52,17 +66,17 @@ const form = reactive<LoginFormModel>({
 });
 
 /**
- * Текст кнопки отправки формы логина.
+ * Текст основной кнопки логина.
  */
 const submitLabel = computed(() => (authStore.isSubmitting ? "Входим..." : "Войти"));
 
 /**
- * Текущее сообщение об ошибке auth store.
+ * Сообщение об ошибке авторизации.
  */
 const errorMessage = computed(() => authStore.errorMessage);
 
 /**
- * Отправляет логин-форму и переводит пользователя в защищенный раздел.
+ * Выполняет вход и переводит пользователя в основной раздел.
  */
 async function handleSubmit(): Promise<void> {
   await authStore.login({
@@ -72,10 +86,48 @@ async function handleSubmit(): Promise<void> {
 
   await router.replace(APP_HOME_ROUTE_PATH);
 }
+
+/**
+ * Переводит пользователя на экран регистрации.
+ */
+async function goToRegister(): Promise<void> {
+  await router.replace(REGISTER_ROUTE_PATH);
+}
 </script>
 
 <style scoped>
-.login-page {
+.login-page__fields {
   display: grid;
+  gap: var(--dbru-space-4);
+}
+
+.login-page__primary-action {
+  width: 100%;
+  margin-top: var(--dbru-space-4);
+}
+
+.login-page__divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--dbru-space-3);
+  align-items: center;
+}
+
+.login-page__divider-line {
+  height: 1px;
+  background: var(--dbru-color-border);
+}
+
+.login-page__divider-text {
+  white-space: nowrap;
+}
+
+.login-page__secondary-action {
+  width: 100%;
+}
+
+.login-page__error {
+  margin: 0;
+  color: var(--dbru-color-error);
 }
 </style>

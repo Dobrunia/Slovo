@@ -1,108 +1,49 @@
 <template>
-  <section class="auth-panel">
-    <DbrCard as="section" class="auth-panel__card">
-      <header class="auth-panel__header">
-        <p class="dbru-text-xs dbru-text-muted">{{ eyebrow }}</p>
-        <h1 class="dbru-text-lg dbru-text-main">{{ title }}</h1>
-        <p class="dbru-text-sm dbru-text-muted">{{ description }}</p>
-      </header>
-
-      <form class="auth-panel__form" @submit.prevent="emit('submit')">
-        <slot />
-
-        <p v-if="errorMessage" class="auth-panel__error dbru-text-sm">
-          {{ errorMessage }}
-        </p>
-
-        <div class="auth-panel__actions">
-          <slot name="actions" />
-        </div>
-      </form>
-
-      <footer
-        v-if="footerText || footerLinkLabel"
-        class="auth-panel__footer dbru-text-sm dbru-text-muted"
-      >
-        <span v-if="footerText">{{ footerText }}</span>
-
-        <RouterLink
-          v-if="footerLinkLabel && footerTo"
-          class="auth-panel__footer-link dbru-text-main"
-          :to="footerTo"
-        >
-          {{ footerLinkLabel }}
-        </RouterLink>
-      </footer>
-    </DbrCard>
-  </section>
+  <div class="auth-panel dbru-surface">
+    <h1 class="auth-panel__title dbru-text-main">{{ title }}</h1>
+    <slot />
+  </div>
 </template>
 
 <script setup lang="ts">
-import { DbrCard } from "dobruniaui-vue";
-import { RouterLink } from "vue-router";
-
 /**
  * Свойства общей auth-панели клиента.
  */
 interface AuthFormPanelProps {
-  eyebrow: string;
   title: string;
-  description: string;
-  errorMessage?: string | null;
-  footerText?: string;
-  footerLinkLabel?: string;
-  footerTo?: string;
 }
 
 defineProps<AuthFormPanelProps>();
-
-const emit = defineEmits<{
-  submit: [];
-}>();
 </script>
 
 <style scoped>
 .auth-panel {
+  width: min(100%, 34rem);
+  max-height: calc(100dvh - (var(--dbru-space-6) * 2));
   display: grid;
-}
-
-.auth-panel__card {
-  display: grid;
-  gap: var(--dbru-space-5);
+  gap: var(--dbru-space-6);
   padding: var(--dbru-space-6);
+  margin-inline: auto;
+  overflow: auto;
   border-radius: var(--dbru-radius-md);
+  border: var(--dbru-border-size-1) solid var(--dbru-color-border);
+  box-shadow: var(--dbru-shadow-md);
 }
 
-.auth-panel__header {
-  display: grid;
-  gap: var(--dbru-space-2);
+.auth-panel__title {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.05;
+  font-weight: 700;
 }
 
-.auth-panel__form {
-  display: grid;
-  gap: var(--dbru-space-4);
-}
-
-.auth-panel__actions {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.auth-panel__footer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--dbru-space-2);
-}
-
-.auth-panel__footer-link {
-  text-decoration: none;
-}
-
-.auth-panel__footer-link:hover {
-  text-decoration: underline;
-}
-
-.auth-panel__error {
-  color: var(--dbru-color-danger);
+@media (max-width: 640px) {
+  .auth-panel {
+    width: min(100%, 28rem);
+    max-height: calc(100dvh - (var(--dbru-space-4) * 2));
+    gap: var(--dbru-space-5);
+    padding: var(--dbru-space-5);
+  }
 }
 </style>

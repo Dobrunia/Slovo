@@ -1,13 +1,11 @@
 <template>
   <header class="app-header">
     <div class="app-header__copy">
-      <p class="dbru-text-xs dbru-text-muted">Workspace</p>
+      <p class="dbru-text-xs dbru-text-muted">Slovo</p>
       <h2 class="dbru-text-lg dbru-text-main">{{ title }}</h2>
     </div>
 
-    <div class="app-header__actions">
-      <DbrBadge class="app-header__status dbru-text-sm">{{ statusLabel }}</DbrBadge>
-
+    <div v-if="authStore.isAuthenticated" class="app-header__actions">
       <DbrButton
         v-if="authStore.isAuthenticated"
         :native-type="'button'"
@@ -22,15 +20,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { DbrBadge, DbrButton } from "dobruniaui-vue";
+import { DbrButton } from "dobruniaui-vue";
 import { DEFAULT_CLIENT_APP_TITLE, LOGIN_ROUTE_PATH } from "../../constants";
-import { useAuthStatusLabel } from "../../composables/useAuthStatusLabel";
 import { useAuthStore } from "../../stores/auth";
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const statusLabel = useAuthStatusLabel();
 
 /**
  * Заголовок текущего маршрута в шапке приложения.
@@ -67,12 +63,5 @@ async function handleLogout(): Promise<void> {
   flex-wrap: wrap;
   gap: var(--dbru-space-3);
   align-items: center;
-}
-
-.app-header__status {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2.25rem;
-  padding: 0 var(--dbru-space-3);
 }
 </style>
