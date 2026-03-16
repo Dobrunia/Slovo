@@ -9,7 +9,7 @@ import {
 import { resolveRouteAccess } from "./guards";
 import { pinia } from "../stores/pinia";
 import { useAuthStore } from "../stores/auth";
-import AppHomePage from "../views/AppHomePage.vue";
+import HomePage from "../views/HomePage.vue";
 import LandingPage from "../views/LandingPage.vue";
 import LoginPage from "../views/LoginPage.vue";
 import RegisterPage from "../views/RegisterPage.vue";
@@ -49,7 +49,7 @@ export const router = createRouter({
     },
     {
       path: APP_HOME_ROUTE_PATH,
-      component: AppHomePage,
+      component: HomePage,
       meta: {
         requiresAuth: true,
         title: DEFAULT_CLIENT_APP_TITLE,

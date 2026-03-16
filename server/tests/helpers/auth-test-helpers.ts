@@ -25,11 +25,38 @@ export type StoredTestAuthSession = {
 };
 
 /**
+ * Упрощенная запись сервера для GraphQL-тестов без реального Prisma и БД.
+ */
+export type StoredTestServer = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  isPublic: boolean;
+  ownerId: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * Упрощенная запись membership сервера для GraphQL-тестов без реального Prisma и БД.
+ */
+export type StoredTestServerMember = {
+  id: string;
+  serverId: string;
+  userId: string;
+  role: "OWNER" | "ADMIN" | "MEMBER";
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
  * Создает минимальный in-memory data layer, достаточный для auth GraphQL-тестов.
  */
 export function createAuthTestDataLayer() {
   const users: StoredTestUser[] = [];
   const sessions: StoredTestAuthSession[] = [];
+  const servers: StoredTestServer[] = [];
+  const serverMembers: StoredTestServerMember[] = [];
 
   const dataLayer = {
     prisma: {
@@ -113,6 +140,45 @@ export function createAuthTestDataLayer() {
         }) =>
           sessions.find((session) => session.tokenHash === args.where.tokenHash) ?? null,
       },
+      serverMember: {
+        findMany: async (args?: {
+          where?: {
+            userId?: string;
+          };
+          orderBy?: {
+            server?: {
+              updatedAt?: "asc" | "desc";
+            };
+          };
+          include?: {
+            server?: boolean;
+          };
+        }) => {
+          const filteredMembers = serverMembers.filter(
+            (member) => args?.where?.userId === undefined || member.userId === args.where.userId,
+          );
+
+          const enrichedMembers = filteredMembers.map((member) => ({
+            ...member,
+            server: servers.find((server) => server.id === member.serverId) ?? null,
+          }));
+
+          const updatedAtOrder = args?.orderBy?.server?.updatedAt;
+
+          if (updatedAtOrder) {
+            enrichedMembers.sort((left, right) => {
+              const leftTime = left.server?.updatedAt.getTime() ?? 0;
+              const rightTime = right.server?.updatedAt.getTime() ?? 0;
+
+              return updatedAtOrder === "desc" ? rightTime - leftTime : leftTime - rightTime;
+            });
+          }
+
+          return args?.include?.server
+            ? enrichedMembers
+            : enrichedMembers.map(({ server, ...member }) => member);
+        },
+      },
       $disconnect: async () => undefined,
     },
   } as unknown as DataLayer;
@@ -121,5 +187,7 @@ export function createAuthTestDataLayer() {
     dataLayer,
     users,
     sessions,
+    servers,
+    serverMembers,
   };
 }

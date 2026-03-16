@@ -8,8 +8,6 @@
     </div>
 
     <section v-else class="app-shell__content dbru-surface">
-      <AppHeaderBar />
-
       <div class="app-shell__body">
         <RouterView />
       </div>
@@ -21,7 +19,6 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { RouterView } from "vue-router";
-import AppHeaderBar from "./components/layout/AppHeaderBar.vue";
 
 const route = useRoute();
 
@@ -77,15 +74,17 @@ const guestShellClassName = computed(() =>
 }
 
 .app-shell__content {
-  min-height: 100vh;
-  overflow: hidden;
+  min-height: 100dvh;
+  width: min(100%, 96rem);
+  overflow: clip;
   border-radius: var(--dbru-radius-md);
   margin: 0 auto;
-  width: min(100%, 72rem);
 }
 
 .app-shell__body {
-  padding: var(--dbru-space-6);
+  min-height: 100dvh;
+  padding: var(--dbru-space-4);
+  box-sizing: border-box;
 }
 
 @media (max-width: 640px) {
