@@ -65,25 +65,33 @@ export const useAuthStore = defineStore("auth", () => {
   }
 
   /**
-   * Регистрирует нового пользователя без автоматического входа.
+   * Регистрирует нового пользователя и сразу создает авторизованную сессию.
    */
   async function register(input: RegisterInput): Promise<RegisterResult> {
     isSubmitting.value = true;
     errorMessage.value = null;
 
     try {
+      const normalizedEmail = input.email.trim().toLowerCase();
       const result = await authApiClient.register({
-        email: input.email.trim(),
+        email: normalizedEmail,
         username: input.username.trim(),
         displayName: input.displayName.trim(),
         password: input.password,
       });
 
-      status.value = currentUser.value ? "authenticated" : "anonymous";
-      isInitialized.value = true;
+      const authSession = await authApiClient.login({
+        email: normalizedEmail,
+        password: input.password,
+      });
+
+      applyAuthenticatedState(authSession);
       return result;
     } catch (error) {
+      clearAuthenticatedState();
       errorMessage.value = toErrorMessage(error);
+      status.value = "anonymous";
+      isInitialized.value = true;
       throw error;
     } finally {
       isSubmitting.value = false;

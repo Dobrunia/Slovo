@@ -127,6 +127,62 @@ describe("auth store", () => {
     expect(store.sessionToken).toBeNull();
     expect(window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY)).toBeNull();
   });
+
+  /**
+   * Проверяется, что после успешной регистрации клиент сразу выполняет логин,
+   * получает session token и переводит пользователя в authenticated-state без отдельного шага входа.
+   * Это важно, потому что иначе пользователь проходит лишний экран после уже успешного создания аккаунта,
+   * хотя серверный auth-flow позволяет немедленно открыть защищенную часть приложения.
+   * Граничные случаи: должны уйти два запроса подряд, второй запрос обязан использовать
+   * нормализованный email, а session token должен сохраниться и в store, и в localStorage.
+   */
+  test("should log in the user immediately after successful registration", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            register: {
+              user: testUser,
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            login: {
+              sessionToken: "fresh-session-token",
+              user: testUser,
+            },
+          },
+        }),
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const store = useAuthStore();
+
+    await store.register({
+      email: " USER@example.com ",
+      username: " dobrunia ",
+      displayName: " Добрыня ",
+      password: "super-secret-password",
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(store.status).toBe("authenticated");
+    expect(store.currentUser).toEqual(testUser);
+    expect(store.sessionToken).toBe("fresh-session-token");
+    expect(window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY)).toBe("fresh-session-token");
+
+    const loginCall = fetchMock.mock.calls.at(1) as [RequestInfo | URL, RequestInit?] | undefined;
+    const loginPayload = JSON.parse(String(loginCall?.[1]?.body)) as {
+      query: string;
+    };
+
+    expect(loginPayload.query).toContain('email: "user@example.com"');
+  });
 });
 
 /**

@@ -66,7 +66,7 @@ import { computed, reactive } from "vue";
 import { useRouter } from "vue-router";
 import { DbrButton, DbrInput } from "dobruniaui-vue";
 import AuthFormPanel from "../components/auth/AuthFormPanel.vue";
-import { LOGIN_ROUTE_PATH } from "../constants";
+import { APP_HOME_ROUTE_PATH, LOGIN_ROUTE_PATH } from "../constants";
 import { useAuthStore } from "../stores/auth";
 import type { RegisterFormModel } from "../types/auth";
 
@@ -91,7 +91,7 @@ const submitLabel = computed(() => (authStore.isSubmitting ? "Создаем..."
 const errorMessage = computed(() => authStore.errorMessage);
 
 /**
- * Выполняет регистрацию и переводит пользователя к экрану входа.
+ * Выполняет регистрацию и сразу переводит пользователя в приложение.
  */
 async function handleSubmit(): Promise<void> {
   await authStore.register({
@@ -101,7 +101,7 @@ async function handleSubmit(): Promise<void> {
     password: form.password,
   });
 
-  await router.replace(LOGIN_ROUTE_PATH);
+  await router.replace(APP_HOME_ROUTE_PATH);
 }
 
 /**
