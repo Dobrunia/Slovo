@@ -52,6 +52,13 @@ describe("auth store", () => {
         }),
       }),
     );
+    const firstCall = fetchMock.mock.calls.at(0) as [RequestInfo | URL, RequestInit?] | undefined;
+    const requestInit = firstCall?.[1] as RequestInit;
+    const payload = JSON.parse(String(requestInit.body)) as {
+      query: string;
+    };
+
+    expect(payload.query).toContain("me(input: {})");
     expect(store.status).toBe("authenticated");
     expect(store.currentUser).toEqual(testUser);
     expect(store.sessionToken).toBe("stored-session-token");

@@ -119,4 +119,59 @@ describe("auth api client", () => {
     expect(payload.query).toContain('email: "user@example.com"');
     expect(payload.query).not.toContain("LoginInput");
   });
+
+  /**
+   * Проверяется, что клиентский запрос `me` использует тот же inline-контракт,
+   * который ожидает текущий StrictQL runtime на сервере.
+   * Это важно, потому что именно `me` используется для восстановления сессии после перезагрузки,
+   * и ошибка в сигнатуре этого query немедленно разлогинивает пользователя при refresh.
+   * Граничные случаи: запрос обязан содержать `input: {}` и отправлять auth-заголовки
+   * вместе с session token, иначе protected route не сможет восстановить пользователя.
+   */
+  test("should build me query with inline empty input and auth headers", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: {
+            me: {
+              id: "user-1",
+              email: "user@example.com",
+              username: "dobrunia",
+              displayName: "Добрыня",
+              avatarUrl: null,
+            },
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json",
+          },
+        },
+      ),
+    );
+    const client = createAuthApiClient({
+      graphqlUrl: DEFAULT_CLIENT_GRAPHQL_URL,
+      fetchImplementation: fetchMock as typeof fetch,
+    });
+
+    await client.me("session-token");
+
+    const firstCall = fetchMock.mock.calls.at(0) as
+      | [RequestInfo | URL, RequestInit?]
+      | undefined;
+    expect(firstCall).toBeDefined();
+    const requestInit = firstCall?.[1] as RequestInit;
+    const payload = JSON.parse(String(requestInit.body)) as {
+      query: string;
+    };
+
+    expect(requestInit.headers).toEqual(
+      expect.objectContaining({
+        authorization: "Bearer session-token",
+        "x-session-token": "session-token",
+      }),
+    );
+    expect(payload.query).toContain("me(input: {})");
+  });
 });

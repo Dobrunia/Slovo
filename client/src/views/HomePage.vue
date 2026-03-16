@@ -1,81 +1,7 @@
-<template>
-  <section class="home-page">
-    <header class="home-page__topbar dbru-surface">
-      <div class="home-page__topbar-main">
-        <ServerRailModule />
-      </div>
-
-      <div class="home-page__topbar-actions">
-        <DbrButton
-          class="home-page__action-btn"
-          variant="ghost"
-          :native-type="'button'"
-          disabled
-        >
-          <span class="home-page__action-symbol">+</span>
-        </DbrButton>
-
-        <DbrButton
-          class="home-page__action-btn"
-          variant="ghost"
-          :native-type="'button'"
-          :pressed="isSettingsOpen"
-          @click="toggleSettings"
-        >
-          <img
-            :src="settingsIcon"
-            alt=""
-            aria-hidden="true"
-            class="home-page__icon"
-          />
-        </DbrButton>
-      </div>
-    </header>
-
-    <div class="home-page__layout">
-      <aside class="home-page__sidebar">
-        <section class="home-page__panel dbru-surface">
-          <div class="home-page__panel-copy">
-            <p class="dbru-text-xs dbru-text-muted">Voice Channels</p>
-            <h2 class="dbru-text-base dbru-text-main">Список каналов</h2>
-            <p class="dbru-text-sm dbru-text-muted">
-              Здесь появится список voice-каналов сервера.
-            </p>
-          </div>
-        </section>
-
-        <section class="home-page__panel dbru-surface">
-          <div class="home-page__panel-copy">
-            <p class="dbru-text-xs dbru-text-muted">Account Preview</p>
-            <h2 class="dbru-text-base dbru-text-main">Превью аккаунта</h2>
-            <p class="dbru-text-sm dbru-text-muted">
-              Здесь позже будет нижний блок с быстрым превью аккаунта.
-            </p>
-          </div>
-        </section>
-      </aside>
-
-      <section class="home-page__stage dbru-surface">
-        <div class="home-page__stage-empty">
-          <p class="dbru-text-xs dbru-text-muted">Lobby</p>
-          <h1 class="dbru-text-lg dbru-text-main">Главная зона сервера</h1>
-          <p class="dbru-text-sm dbru-text-muted">
-            Пока здесь пусто. В дальнейшем сюда встанет активный канал или лобби сервера.
-          </p>
-        </div>
-      </section>
-    </div>
-
-    <UserSettingsModal
-      :is-open="isSettingsOpen"
-      @close="closeSettings"
-    />
-  </section>
-</template>
-
 <script setup lang="ts">
 import { ref } from "vue";
-import { DbrButton } from "dobruniaui-vue";
+import AppIconButton from "../components/base/AppIconButton.vue";
+import addServerIcon from "../assets/icons/add-server.svg";
 import settingsIcon from "../assets/icons/settings.svg";
 import UserSettingsModal from "../modules/settings/UserSettingsModal.vue";
 import ServerRailModule from "../modules/servers/ServerRailModule.vue";
@@ -83,130 +9,158 @@ import ServerRailModule from "../modules/servers/ServerRailModule.vue";
 const isSettingsOpen = ref(false);
 
 /**
- * Переключает видимость модального окна пользовательских настроек.
+ * Переключает видимость модального окна с настройками пользователя.
  */
 function toggleSettings(): void {
   isSettingsOpen.value = !isSettingsOpen.value;
 }
 
 /**
- * Закрывает модальное окно пользовательских настроек.
+ * Закрывает модальное окно с настройками.
  */
 function closeSettings(): void {
   isSettingsOpen.value = false;
 }
+
+/**
+ * Временная заглушка до реализации создания сервера.
+ */
+function handleAddServer(): void {
+  // Действие появится в следующем наборе задач.
+}
 </script>
+
+<template>
+  <div class="home-page">
+    <header class="home-page__header">
+      <div class="home-page__rail">
+        <ServerRailModule />
+      </div>
+
+      <div class="home-page__actions">
+        <AppIconButton
+          :icon-src="addServerIcon"
+          label="Добавить сервер"
+          icon-alt=""
+          @click="handleAddServer"
+        />
+
+        <AppIconButton
+          :icon-src="settingsIcon"
+          label="Открыть настройки"
+          icon-alt=""
+          @click="toggleSettings"
+        />
+      </div>
+    </header>
+
+    <div class="home-page__body">
+      <aside class="home-page__sidebar">
+        <section class="home-page__panel">
+          <p class="home-page__eyebrow">Список каналов</p>
+          <h2 class="home-page__panel-title">Появится позже</h2>
+        </section>
+
+        <section class="home-page__panel">
+          <p class="home-page__eyebrow">Превью аккаунта</p>
+          <h2 class="home-page__panel-title">Появится позже</h2>
+        </section>
+      </aside>
+
+      <section class="home-page__stage">
+        <p class="home-page__eyebrow">Главная зона сервера</p>
+        <h1 class="home-page__stage-title">Контент появится позже</h1>
+      </section>
+    </div>
+
+    <UserSettingsModal :is-open="isSettingsOpen" @close="closeSettings" />
+  </div>
+</template>
 
 <style scoped>
 .home-page {
-  min-height: calc(100dvh - (var(--dbru-space-4) * 2));
   display: grid;
-  grid-template-rows: auto 1fr;
   gap: var(--dbru-space-4);
 }
 
-.home-page__topbar {
+.home-page__header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--dbru-space-4);
   align-items: center;
-  padding: var(--dbru-space-4) var(--dbru-space-5);
-  border-radius: var(--dbru-radius-md);
 }
 
-.home-page__topbar-main {
+.home-page__rail {
   min-width: 0;
 }
 
-.home-page__topbar-actions {
-  display: flex;
-  gap: var(--dbru-space-3);
+.home-page__actions {
+  display: inline-flex;
   align-items: center;
+  gap: var(--dbru-space-2);
 }
 
-.home-page__action-btn {
-  width: 2.75rem;
-  min-width: 2.75rem;
-  padding-inline: 0;
-  justify-content: center;
-}
-
-.home-page__action-symbol {
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.home-page__icon {
-  width: 1.2rem;
-  height: 1.2rem;
-  display: block;
-}
-
-.home-page__layout {
-  min-height: 0;
+.home-page__body {
   display: grid;
-  grid-template-columns: minmax(16rem, 18rem) minmax(0, 1fr);
+  grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr);
   gap: var(--dbru-space-4);
+  min-height: 0;
 }
 
 .home-page__sidebar {
   display: grid;
-  grid-template-rows: minmax(14rem, 1fr) auto;
   gap: var(--dbru-space-4);
+  min-height: 0;
 }
 
-.home-page__panel {
+.home-page__panel,
+.home-page__stage {
   display: grid;
-  padding: var(--dbru-space-5);
-  border-radius: var(--dbru-radius-md);
-}
-
-.home-page__panel-copy,
-.home-page__stage-empty {
-  display: grid;
+  gap: var(--dbru-space-3);
   align-content: start;
-  gap: var(--dbru-space-2);
-}
-
-.home-page__panel-copy p,
-.home-page__panel-copy h2,
-.home-page__stage-empty p,
-.home-page__stage-empty h1 {
-  margin: 0;
+  min-height: 12rem;
+  padding: var(--dbru-space-5);
+  border: 1px solid var(--dbru-color-border);
+  border-radius: var(--dbru-radius-md);
+  background: color-mix(in srgb, var(--dbru-color-bg) 92%, white);
 }
 
 .home-page__stage {
-  min-height: 0;
-  display: grid;
-  padding: var(--dbru-space-6);
-  border-radius: var(--dbru-radius-md);
+  min-height: 100%;
 }
 
-.home-page__stage-empty {
-  width: min(100%, 40rem);
+.home-page__eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--dbru-color-text) 62%, transparent);
 }
 
-@media (max-width: 840px) {
-  .home-page__layout {
+.home-page__panel-title,
+.home-page__stage-title {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+
+.home-page__stage-title {
+  font-size: 1.45rem;
+}
+
+@media (max-width: 960px) {
+  .home-page__body {
     grid-template-columns: 1fr;
-  }
-
-  .home-page__sidebar {
-    grid-template-rows: auto auto;
   }
 }
 
 @media (max-width: 640px) {
-  .home-page {
-    min-height: calc(100dvh - (var(--dbru-space-4) * 2));
-  }
-
-  .home-page__topbar {
+  .home-page__header {
     grid-template-columns: 1fr;
-    padding: var(--dbru-space-4);
   }
 
-  .home-page__topbar-actions {
+  .home-page__actions {
     justify-content: flex-end;
   }
 

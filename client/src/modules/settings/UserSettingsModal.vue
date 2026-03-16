@@ -1,98 +1,15 @@
-<template>
-  <div
-    v-if="isOpen"
-    class="user-settings-modal"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="user-settings-modal-title"
-    @click.self="$emit('close')"
-  >
-    <DbrCard as="section" class="user-settings-modal__card">
-      <div class="user-settings-modal__header">
-        <div class="user-settings-modal__title-block">
-          <p class="dbru-text-xs dbru-text-muted">Настройки пользователя</p>
-          <h2 id="user-settings-modal-title" class="dbru-text-lg dbru-text-main">
-            Профиль
-          </h2>
-        </div>
-
-        <DbrButton
-          variant="ghost"
-          :native-type="'button'"
-          @click="$emit('close')"
-        >
-          Закрыть
-        </DbrButton>
-      </div>
-
-      <div class="user-settings-modal__intro">
-        <DbrAvatar
-          :src="authStore.currentUser?.avatarUrl ?? undefined"
-          :name="authStore.currentUser?.displayName ?? authStore.currentUser?.username ?? 'Пользователь'"
-          size="lg"
-        />
-
-        <div class="user-settings-modal__intro-copy">
-          <h3 class="dbru-text-base dbru-text-main">
-            {{ authStore.currentUser?.displayName ?? "Пользователь" }}
-          </h3>
-          <p class="dbru-text-sm dbru-text-muted">
-            @{{ authStore.currentUser?.username ?? "guest" }}
-          </p>
-        </div>
-      </div>
-
-      <dl class="user-settings-modal__details">
-        <div class="user-settings-modal__detail">
-          <dt class="dbru-text-xs dbru-text-muted">Email</dt>
-          <dd class="dbru-text-sm dbru-text-main">
-            {{ authStore.currentUser?.email ?? "Неизвестно" }}
-          </dd>
-        </div>
-
-        <div class="user-settings-modal__detail">
-          <dt class="dbru-text-xs dbru-text-muted">Display name</dt>
-          <dd class="dbru-text-sm dbru-text-main">
-            {{ authStore.currentUser?.displayName ?? "Не задано" }}
-          </dd>
-        </div>
-
-        <div class="user-settings-modal__detail">
-          <dt class="dbru-text-xs dbru-text-muted">Username</dt>
-          <dd class="dbru-text-sm dbru-text-main">
-            @{{ authStore.currentUser?.username ?? "guest" }}
-          </dd>
-        </div>
-      </dl>
-
-      <div class="user-settings-modal__actions">
-        <DbrButton
-          variant="ghost"
-          :native-type="'button'"
-          @click="handleLogout"
-        >
-          Выйти
-        </DbrButton>
-      </div>
-    </DbrCard>
-  </div>
-</template>
-
 <script setup lang="ts">
+import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { DbrAvatar, DbrButton, DbrCard } from "dobruniaui-vue";
-import { LOGIN_ROUTE_PATH } from "../../constants";
+import xIcon from "../../assets/icons/x.svg";
+import AppIconButton from "../../components/base/AppIconButton.vue";
 import { useAuthStore } from "../../stores/auth";
 import { useServersStore } from "../../stores/servers";
 
-/**
- * Свойства модального окна пользовательских настроек.
- */
-interface UserSettingsModalProps {
+defineProps<{
   isOpen: boolean;
-}
-
-defineProps<UserSettingsModalProps>();
+}>();
 
 const emit = defineEmits<{
   close: [];
@@ -102,99 +19,207 @@ const router = useRouter();
 const authStore = useAuthStore();
 const serversStore = useServersStore();
 
+const profileName = computed(() => authStore.currentUser?.displayName ?? "Пользователь");
+const profileHandle = computed(() =>
+  authStore.currentUser?.username ? `@${authStore.currentUser.username}` : "@slovo-user",
+);
+const profileEmail = computed(() => authStore.currentUser?.email ?? "Email не указан");
+
 /**
- * Завершает клиентскую сессию, очищает список серверов и закрывает модальное окно.
+ * Завершает текущую сессию и возвращает пользователя к экрану входа.
  */
 async function handleLogout(): Promise<void> {
   authStore.logout();
   serversStore.reset();
   emit("close");
-  await router.replace(LOGIN_ROUTE_PATH);
+  await router.replace("/login");
 }
 </script>
 
+<template>
+  <Teleport to="body">
+    <transition name="settings-modal">
+      <div v-if="isOpen" class="settings-modal" @click.self="emit('close')">
+        <div class="settings-modal__dialog">
+          <DbrCard class="settings-modal__card">
+            <div class="settings-modal__surface">
+              <header class="settings-modal__header">
+                <div class="settings-modal__heading">
+                  <p class="settings-modal__eyebrow">Настройки</p>
+                  <h2 class="settings-modal__title">Профиль</h2>
+                </div>
+
+                <AppIconButton
+                  :icon-src="xIcon"
+                  label="Закрыть настройки"
+                  icon-alt=""
+                  @click="emit('close')"
+                />
+              </header>
+
+              <section class="settings-modal__profile">
+                <DbrAvatar
+                  size="lg"
+                  :name="profileName"
+                  :src="authStore.currentUser?.avatarUrl ?? undefined"
+                />
+
+                <div class="settings-modal__info">
+                  <h3 class="settings-modal__name">{{ profileName }}</h3>
+                  <p class="settings-modal__meta">{{ profileHandle }}</p>
+                  <p class="settings-modal__meta">{{ profileEmail }}</p>
+                </div>
+              </section>
+
+              <section class="settings-modal__body">
+                <p class="settings-modal__copy">
+                  Здесь позже появятся настройки имени, аватара и персональных параметров.
+                </p>
+              </section>
+
+              <footer class="settings-modal__footer">
+                <DbrButton variant="danger" @click="handleLogout">Выйти из аккаунта</DbrButton>
+              </footer>
+            </div>
+          </DbrCard>
+        </div>
+      </div>
+    </transition>
+  </Teleport>
+</template>
+
 <style scoped>
-.user-settings-modal {
+.settings-modal {
   position: fixed;
   inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: center;
-  padding: var(--dbru-space-6);
-  background: color-mix(in srgb, var(--dbru-color-bg) 54%, transparent);
-  backdrop-filter: blur(10px);
-}
-
-.user-settings-modal__card {
-  width: min(100%, 34rem);
-  display: grid;
-  gap: var(--dbru-space-6);
-  padding: var(--dbru-space-6);
-  border-radius: var(--dbru-radius-md);
-}
-
-.user-settings-modal__header {
+  z-index: 50;
   display: flex;
-  gap: var(--dbru-space-4);
+  align-items: center;
+  justify-content: center;
+  padding: var(--dbru-space-4);
+  backdrop-filter: blur(12px);
+}
+
+.settings-modal__dialog {
+  width: min(100%, 34rem);
+}
+
+.settings-modal__card {
+  width: 100%;
+  border: 1px solid var(--dbru-color-border);
+  border-radius: var(--dbru-radius-md);
+  background: color-mix(in srgb, var(--dbru-color-bg) 96%, white);
+  box-shadow: var(--dbru-shadow-md);
+}
+
+.settings-modal__surface {
+  display: grid;
+  gap: var(--dbru-space-5);
+  padding: var(--dbru-space-6);
+  color: var(--dbru-color-text);
+}
+
+.settings-modal__header {
+  display: flex;
   align-items: flex-start;
   justify-content: space-between;
-}
-
-.user-settings-modal__title-block,
-.user-settings-modal__intro-copy {
-  display: grid;
-  gap: var(--dbru-space-1);
-}
-
-.user-settings-modal__title-block p,
-.user-settings-modal__title-block h2,
-.user-settings-modal__intro-copy h3,
-.user-settings-modal__intro-copy p,
-.user-settings-modal__detail dt,
-.user-settings-modal__detail dd {
-  margin: 0;
-}
-
-.user-settings-modal__intro {
-  display: grid;
-  grid-template-columns: auto 1fr;
   gap: var(--dbru-space-4);
+}
+
+.settings-modal__heading {
+  display: grid;
+  gap: var(--dbru-space-2);
+}
+
+.settings-modal__eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--dbru-color-text) 64%, transparent);
+}
+
+.settings-modal__title {
+  margin: 0;
+  font-size: 1.55rem;
+  line-height: 1.1;
+  color: var(--dbru-color-text);
+}
+
+.settings-modal__profile {
+  display: flex;
   align-items: center;
-}
-
-.user-settings-modal__details {
-  display: grid;
   gap: var(--dbru-space-4);
-  margin: 0;
 }
 
-.user-settings-modal__detail {
+.settings-modal__info {
   display: grid;
-  gap: var(--dbru-space-1);
-  padding: var(--dbru-space-4);
-  border-radius: var(--dbru-radius-md);
-  border: var(--dbru-border-size-1) solid var(--dbru-color-border);
-  background: color-mix(in srgb, var(--dbru-color-bg) 72%, transparent);
+  gap: var(--dbru-space-2);
 }
 
-.user-settings-modal__actions {
+.settings-modal__name {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.2;
+  color: var(--dbru-color-text);
+}
+
+.settings-modal__meta {
+  margin: 0;
+  color: color-mix(in srgb, var(--dbru-color-text) 68%, transparent);
+}
+
+.settings-modal__body {
+  display: grid;
+  gap: var(--dbru-space-3);
+}
+
+.settings-modal__copy {
+  margin: 0;
+  color: color-mix(in srgb, var(--dbru-color-text) 74%, transparent);
+}
+
+.settings-modal__footer {
   display: flex;
   justify-content: flex-end;
 }
 
+.settings-modal-enter-active,
+.settings-modal-leave-active {
+  transition: opacity 180ms ease;
+}
+
+.settings-modal-enter-active .settings-modal__dialog,
+.settings-modal-leave-active .settings-modal__dialog {
+  transition:
+    transform 180ms ease,
+    opacity 180ms ease;
+}
+
+.settings-modal-enter-from,
+.settings-modal-leave-to {
+  opacity: 0;
+}
+
+.settings-modal-enter-from .settings-modal__dialog,
+.settings-modal-leave-to .settings-modal__dialog {
+  opacity: 0;
+  transform: translateY(0.75rem) scale(0.98);
+}
+
 @media (max-width: 640px) {
-  .user-settings-modal {
-    padding: var(--dbru-space-4);
+  .settings-modal {
+    padding: var(--dbru-space-3);
   }
 
-  .user-settings-modal__card {
-    gap: var(--dbru-space-5);
+  .settings-modal__surface {
+    gap: var(--dbru-space-4);
     padding: var(--dbru-space-5);
   }
 
-  .user-settings-modal__intro {
-    grid-template-columns: 1fr;
-    justify-items: start;
+  .settings-modal__profile {
+    align-items: flex-start;
   }
 }
 </style>

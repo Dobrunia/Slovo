@@ -22,7 +22,7 @@ const AUTH_USER_FIELDS = `
 
 const ME_QUERY = `
   query {
-    me {
+    me(input: {}) {
       ${AUTH_USER_FIELDS}
     }
   }
