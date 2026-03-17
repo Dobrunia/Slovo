@@ -1,12 +1,23 @@
 import type { Server as HttpServer } from "node:http";
 import { createContractRegistry } from "dobrunia-liverail-contracts";
 import {
+  type ServerEventDeliverer,
+  type ServerEventRoute,
+  type ServerEventRouter,
   createServerRuntime,
   createServerRuntimeContext,
 } from "dobrunia-liverail-server";
-import { createSocketIoServerAdapter } from "dobrunia-liverail-server/socket-io";
+import {
+  createSocketIoChannelRoute,
+  createSocketIoEventDeliverer,
+  createSocketIoServerAdapter,
+} from "dobrunia-liverail-server/socket-io";
 import { Server as SocketIOServer } from "socket.io";
 import { DEFAULT_CLIENT_ORIGIN } from "../config/constants.js";
+import {
+  REALTIME_CHANNEL_NAMES,
+  REALTIME_EVENT_NAMES,
+} from "../../../shared/realtime/names.js";
 
 /**
  * Стандартный transport id для realtime-подключений проекта.
@@ -51,8 +62,57 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
       credentials: true,
     },
   });
+  const sharedEventDeliverer = createSocketIoEventDeliverer(io);
+  const eventRouters: Record<string, ServerEventRouter> = {
+    [REALTIME_EVENT_NAMES.profileUpdated]: ({ payload }) =>
+      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.userProfile, {
+        userId: (payload as { userId: string }).userId,
+      }),
+    [REALTIME_EVENT_NAMES.userServersUpdated]: ({ payload }) =>
+      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.userProfile, {
+        userId: (payload as { userId: string }).userId,
+      }),
+    [REALTIME_EVENT_NAMES.serverUpdated]: ({ payload }) =>
+      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.serverStructure, {
+        serverId: (payload as { serverId: string }).serverId,
+      }),
+    [REALTIME_EVENT_NAMES.channelsUpdated]: ({ payload }) =>
+      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.serverStructure, {
+        serverId: (payload as { serverId: string }).serverId,
+      }),
+    [REALTIME_EVENT_NAMES.presenceUpdated]: ({ payload }) =>
+      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.serverPresence, {
+        serverId: (payload as { serverId: string }).serverId,
+      }),
+    [REALTIME_EVENT_NAMES.voiceStateUpdated]: ({ payload }) =>
+      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.voiceSession, {
+        serverId: (payload as { serverId: string; channelId: string }).serverId,
+        channelId: (payload as { serverId: string; channelId: string }).channelId,
+      }),
+    [REALTIME_EVENT_NAMES.screenShareUpdated]: ({ payload }) =>
+      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.voiceSession, {
+        serverId: (payload as { serverId: string; channelId: string }).serverId,
+        channelId: (payload as { serverId: string; channelId: string }).channelId,
+      }),
+    [REALTIME_EVENT_NAMES.forcedDisconnect]: ({ payload }) =>
+      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.userProfile, {
+        userId: (payload as { userId: string }).userId,
+      }),
+  };
+  const eventDeliverers: Record<string, ServerEventDeliverer> = {
+    [REALTIME_EVENT_NAMES.profileUpdated]: sharedEventDeliverer,
+    [REALTIME_EVENT_NAMES.userServersUpdated]: sharedEventDeliverer,
+    [REALTIME_EVENT_NAMES.serverUpdated]: sharedEventDeliverer,
+    [REALTIME_EVENT_NAMES.channelsUpdated]: sharedEventDeliverer,
+    [REALTIME_EVENT_NAMES.presenceUpdated]: sharedEventDeliverer,
+    [REALTIME_EVENT_NAMES.voiceStateUpdated]: sharedEventDeliverer,
+    [REALTIME_EVENT_NAMES.screenShareUpdated]: sharedEventDeliverer,
+    [REALTIME_EVENT_NAMES.forcedDisconnect]: sharedEventDeliverer,
+  };
   const runtime = createServerRuntime({
     registry: input.registry,
+    eventRouters: eventRouters as never,
+    eventDeliverers: eventDeliverers as never,
   });
   const adapter = createSocketIoServerAdapter({
     io,

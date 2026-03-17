@@ -7,9 +7,11 @@ import {
 } from "../config/constants.js";
 import { createGraphqlContext } from "./context.js";
 import { strictqlApiSchema } from "./registry.js";
+import type { SlovoRealtimeRuntime } from "../realtime/runtime.js";
 
 type GraphqlServerInput = {
   dataLayer: DataLayer;
+  realtimeRuntime?: SlovoRealtimeRuntime | null;
 };
 
 /**
@@ -25,6 +27,7 @@ export function createGraphqlServer(input: GraphqlServerInput) {
     injectContext: ({ adapterContext }) =>
       createGraphqlContext({
         dataLayer: input.dataLayer,
+        realtimeRuntime: input.realtimeRuntime,
         request: adapterContext as Request,
       }),
   });

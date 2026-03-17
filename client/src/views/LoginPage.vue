@@ -128,4 +128,16 @@ async function goToRegister(): Promise<void> {
   margin: 0;
   color: var(--dbru-color-error);
 }
+
+:deep(input:-webkit-autofill),
+:deep(input:-webkit-autofill:hover),
+:deep(input:-webkit-autofill:focus),
+:deep(textarea:-webkit-autofill),
+:deep(select:-webkit-autofill) {
+  -webkit-text-fill-color: var(--dbru-color-text);
+  caret-color: var(--dbru-color-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--dbru-color-surface) inset;
+  box-shadow: 0 0 0 1000px var(--dbru-color-surface) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
 </style>

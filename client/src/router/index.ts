@@ -34,7 +34,7 @@ export const router = createRouter({
       component: LoginPage,
       meta: {
         guestOnly: true,
-        guestLayout: "auth",
+        guestLayout: "login",
         title: "Вход",
       },
     },
@@ -43,7 +43,7 @@ export const router = createRouter({
       component: RegisterPage,
       meta: {
         guestOnly: true,
-        guestLayout: "auth",
+        guestLayout: "register",
         title: "Регистрация",
       },
     },

@@ -10,6 +10,21 @@ export const MAX_SERVERS_PER_OWNER = 2;
  */
 export const MAX_CHANNELS_PER_SERVER = 5;
 
+/**
+ * Минимальная длина названия сервера.
+ */
+export const SERVER_NAME_MIN_LENGTH = 1;
+
+/**
+ * Максимальная длина названия сервера.
+ */
+export const SERVER_NAME_MAX_LENGTH = 191;
+
+/**
+ * Максимальная длина URL аватара сервера.
+ */
+export const SERVER_AVATAR_URL_MAX_LENGTH = 2048;
+
 // Runtime defaults
 
 /**

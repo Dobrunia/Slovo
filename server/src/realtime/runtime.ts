@@ -17,3 +17,8 @@ export function createSlovoRealtimeServer(input: CreateSlovoRealtimeServerInput)
     registry: slovoRealtimeRegistry,
   });
 }
+
+/**
+ * Публичный тип runtime серверного realtime-слоя проекта.
+ */
+export type SlovoRealtimeRuntime = ReturnType<typeof createSlovoRealtimeServer>["runtime"];

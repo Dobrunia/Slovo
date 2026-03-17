@@ -88,6 +88,7 @@ function handleAddServer(): void {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--dbru-space-4);
   align-items: center;
+  padding-inline: var(--dbru-space-4);
 }
 
 .home-page__rail {
@@ -158,6 +159,7 @@ function handleAddServer(): void {
 @media (max-width: 640px) {
   .home-page__header {
     grid-template-columns: 1fr;
+    padding-inline: var(--dbru-space-3);
   }
 
   .home-page__actions {

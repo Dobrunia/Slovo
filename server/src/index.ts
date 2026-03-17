@@ -28,13 +28,16 @@ async function startServer() {
   await connectDataLayer(dataLayer);
   process.stdout.write("Connected to MySQL database\n");
 
-  const yoga = createGraphqlServer({
-    dataLayer,
-  });
-  const server = createServer(yoga);
+  const server = createServer();
   const realtime = createSlovoRealtimeServer({
     httpServer: server,
   });
+  const yoga = createGraphqlServer({
+    dataLayer,
+    realtimeRuntime: realtime.runtime,
+  });
+
+  server.on("request", yoga);
 
   await new Promise<void>((resolve) => {
     server.listen(port, resolve);

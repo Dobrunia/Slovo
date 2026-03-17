@@ -8,9 +8,7 @@
     </div>
 
     <section v-else class="app-shell__content dbru-surface">
-      <div class="app-shell__body">
-        <RouterView />
-      </div>
+      <RouterView />
     </section>
   </main>
 </template>
@@ -33,7 +31,9 @@ const isGuestRoute = computed(() => Boolean(route.meta.guestOnly));
 const guestShellClassName = computed(() =>
   route.meta.guestLayout === "landing"
     ? "guest-shell guest-shell--landing"
-    : "guest-shell guest-shell--auth",
+    : route.meta.guestLayout === "register"
+      ? "guest-shell guest-shell--register"
+      : "guest-shell guest-shell--login",
 );
 </script>
 
@@ -52,17 +52,24 @@ const guestShellClassName = computed(() =>
   box-sizing: border-box;
 }
 
-.guest-shell--auth {
+.guest-shell--login {
   overflow: auto;
   background:
-    url("./assets/auth_back.png") center center / cover no-repeat,
+    url("./assets/login_back.png") center / cover no-repeat,
+    var(--dbru-color-bg);
+}
+
+.guest-shell--register {
+  overflow: auto;
+  background:
+    url("./assets/reg_back.png") center bottom / cover no-repeat,
     var(--dbru-color-bg);
 }
 
 .guest-shell--landing {
   overflow: hidden;
   background:
-    url("./assets/init_bg.png") center center / cover no-repeat,
+    url("./assets/landing_back.png") center bottom / cover no-repeat,
     var(--dbru-color-bg);
 }
 
@@ -75,24 +82,12 @@ const guestShellClassName = computed(() =>
 
 .app-shell__content {
   min-height: 100dvh;
-  width: min(100%, 96rem);
-  overflow: clip;
-  border-radius: var(--dbru-radius-md);
-  margin: 0 auto;
-}
-
-.app-shell__body {
-  min-height: 100dvh;
-  padding: var(--dbru-space-4);
-  box-sizing: border-box;
+  width: 100%;
+  overflow: hidden;
 }
 
 @media (max-width: 640px) {
   .guest-shell {
-    padding: var(--dbru-space-4);
-  }
-
-  .app-shell__body {
     padding: var(--dbru-space-4);
   }
 }

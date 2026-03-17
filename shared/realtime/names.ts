@@ -15,6 +15,7 @@ export const REALTIME_CHANNEL_NAMES = {
  */
 export const REALTIME_EVENT_NAMES = {
   profileUpdated: "profile.updated",
+  userServersUpdated: "user-servers.updated",
   serverUpdated: "server.updated",
   channelsUpdated: "channels.updated",
   presenceUpdated: "presence.updated",

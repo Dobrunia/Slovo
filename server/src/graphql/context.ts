@@ -1,5 +1,6 @@
 import { resolveSessionUserId } from "../auth/session.js";
 import type { DataLayer } from "../data/prisma.js";
+import type { SlovoRealtimeRuntime } from "../realtime/runtime.js";
 
 /**
  * Контекст GraphQL-запроса, общий для StrictQL-резолверов.
@@ -7,10 +8,12 @@ import type { DataLayer } from "../data/prisma.js";
 export type GraphqlContext = {
   dataLayer: DataLayer;
   userId: string | null;
+  realtimeRuntime: SlovoRealtimeRuntime | null;
 };
 
 type ContextInput = {
   dataLayer: DataLayer;
+  realtimeRuntime?: SlovoRealtimeRuntime | null;
   request: Request;
 };
 
@@ -24,5 +27,6 @@ export async function createGraphqlContext(input: ContextInput): Promise<Graphql
       dataLayer: input.dataLayer,
       headers: input.request.headers,
     }),
+    realtimeRuntime: input.realtimeRuntime ?? null,
   };
 }

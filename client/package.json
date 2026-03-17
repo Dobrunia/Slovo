@@ -11,7 +11,7 @@
   "dependencies": {
     "dobrunia-liverail-client": "1.0.1",
     "dobrunia-liverail-contracts": "1.0.0",
-    "dobruniaui-vue": "2.1.0",
+    "dobruniaui-vue": "2.1.2",
     "mediasoup-client": "3.18.7",
     "pinia": "^3.0.4",
     "socket.io-client": "^4.8.3",

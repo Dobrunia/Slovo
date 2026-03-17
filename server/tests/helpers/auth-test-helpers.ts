@@ -50,6 +50,18 @@ export type StoredTestServerMember = {
 };
 
 /**
+ * Упрощенная запись voice-канала для GraphQL-тестов без реальной БД.
+ */
+export type StoredTestVoiceChannel = {
+  id: string;
+  serverId: string;
+  name: string;
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
  * Создает минимальный in-memory data layer, достаточный для auth GraphQL-тестов.
  */
 export function createAuthTestDataLayer() {
@@ -57,6 +69,7 @@ export function createAuthTestDataLayer() {
   const sessions: StoredTestAuthSession[] = [];
   const servers: StoredTestServer[] = [];
   const serverMembers: StoredTestServerMember[] = [];
+  const voiceChannels: StoredTestVoiceChannel[] = [];
 
   const dataLayer = {
     prisma: {
@@ -140,7 +153,92 @@ export function createAuthTestDataLayer() {
         }) =>
           sessions.find((session) => session.tokenHash === args.where.tokenHash) ?? null,
       },
+      server: {
+        count: async (args?: {
+          where?: {
+            ownerId?: string;
+          };
+        }) =>
+          servers.filter(
+            (server) => args?.where?.ownerId === undefined || server.ownerId === args.where.ownerId,
+          ).length,
+        create: async (args: {
+          data: {
+            name: string;
+            avatarUrl?: string | null;
+            isPublic?: boolean;
+            ownerId: string;
+          };
+        }) => {
+          const now = new Date();
+          const server: StoredTestServer = {
+            id: `server-${servers.length + 1}`,
+            name: args.data.name,
+            avatarUrl: args.data.avatarUrl ?? null,
+            isPublic: args.data.isPublic ?? false,
+            ownerId: args.data.ownerId,
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          servers.push(server);
+
+          return server;
+        },
+      },
       serverMember: {
+        create: async (args: {
+          data: {
+            serverId: string;
+            userId: string;
+            role: "OWNER" | "ADMIN" | "MEMBER";
+          };
+        }) => {
+          const now = new Date();
+          const member: StoredTestServerMember = {
+            id: `membership-${serverMembers.length + 1}`,
+            serverId: args.data.serverId,
+            userId: args.data.userId,
+            role: args.data.role,
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          serverMembers.push(member);
+
+          return member;
+        },
+        findUnique: async (args: {
+          where: {
+            serverId_userId: {
+              serverId: string;
+              userId: string;
+            };
+          };
+          include?: {
+            server?: boolean;
+          };
+        }) => {
+          const member =
+            serverMembers.find(
+              (storedMember) =>
+                storedMember.serverId === args.where.serverId_userId.serverId &&
+                storedMember.userId === args.where.serverId_userId.userId,
+            ) ?? null;
+
+          if (!member) {
+            return null;
+          }
+
+          if (!args.include?.server) {
+            return member;
+          }
+
+          return {
+            ...member,
+            server: servers.find((server) => server.id === member.serverId) ?? null,
+          };
+        },
         findMany: async (args?: {
           where?: {
             userId?: string;
@@ -179,6 +277,30 @@ export function createAuthTestDataLayer() {
             : enrichedMembers.map(({ server, ...member }) => member);
         },
       },
+      voiceChannel: {
+        findMany: async (args?: {
+          where?: {
+            serverId?: string;
+          };
+          orderBy?: {
+            sortOrder?: "asc" | "desc";
+          };
+        }) => {
+          const channels = voiceChannels.filter(
+            (channel) => args?.where?.serverId === undefined || channel.serverId === args.where.serverId,
+          );
+
+          if (args?.orderBy?.sortOrder) {
+            channels.sort((left, right) =>
+              args.orderBy?.sortOrder === "desc"
+                ? right.sortOrder - left.sortOrder
+                : left.sortOrder - right.sortOrder,
+            );
+          }
+
+          return channels;
+        },
+      },
       $disconnect: async () => undefined,
     },
   } as unknown as DataLayer;
@@ -189,5 +311,6 @@ export function createAuthTestDataLayer() {
     sessions,
     servers,
     serverMembers,
+    voiceChannels,
   };
 }
