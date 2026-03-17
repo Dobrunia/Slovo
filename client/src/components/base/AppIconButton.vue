@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, useSlots } from "vue";
 
 /**
  * Свойства универсальной прозрачной иконкокнопки.
@@ -8,14 +8,18 @@ interface AppIconButtonProps {
   label: string;
   iconSrc?: string;
   iconAlt?: string;
-  tone?: "default" | "danger";
+  tone?: "default" | "danger" | "success";
+  spinning?: boolean;
 }
 
 const props = withDefaults(defineProps<AppIconButtonProps>(), {
   iconSrc: "",
   iconAlt: "",
   tone: "default",
+  spinning: false,
 });
+
+const slots = useSlots();
 
 /**
  * Возвращает CSS-переменную с источником иконки для mask-рендера.
@@ -29,6 +33,11 @@ const iconStyle = computed(() => {
     "--app-icon-button-icon-src": `url("${props.iconSrc}")`,
   };
 });
+
+/**
+ * Определяет, передано ли в кнопку текстовое содержимое рядом с иконкой.
+ */
+const hasContent = computed(() => Boolean(slots.default));
 </script>
 
 <template>
@@ -37,6 +46,8 @@ const iconStyle = computed(() => {
     class="app-icon-button"
     :class="{
       'app-icon-button--danger': tone === 'danger',
+      'app-icon-button--success': tone === 'success',
+      'app-icon-button--with-content': hasContent,
     }"
     :aria-label="label"
   >
@@ -44,10 +55,20 @@ const iconStyle = computed(() => {
       <span
         v-if="iconSrc"
         class="app-icon-button__image"
+        :class="{
+          'app-icon-button__image--spinning': spinning,
+        }"
         :style="iconStyle"
         aria-hidden="true"
       />
     </slot>
+
+    <span
+      v-if="hasContent"
+      class="app-icon-button__content"
+    >
+      <slot />
+    </span>
   </button>
 </template>
 
@@ -71,7 +92,7 @@ const iconStyle = computed(() => {
 }
 
 .app-icon-button:hover {
-  background-color: color-mix(in srgb, var(--dbru-color-primary) 12%, transparent);
+  background-color: color-mix(in srgb, var(--dbru-color-primary) 12%, transparent); /* НЕ МЕНЯТЬ!! */
 }
 
 .app-icon-button:focus-visible {
@@ -87,6 +108,16 @@ const iconStyle = computed(() => {
   color: var(--dbru-color-error);
 }
 
+.app-icon-button--success {
+  color: var(--dbru-color-success);
+}
+
+.app-icon-button--with-content {
+  width: auto;
+  padding-inline: var(--dbru-space-3);
+  gap: var(--dbru-space-2);
+}
+
 .app-icon-button__image {
   display: block;
   width: 1.375rem;
@@ -100,5 +131,24 @@ const iconStyle = computed(() => {
   mask-repeat: no-repeat;
   -webkit-mask-size: contain;
   mask-size: contain;
+}
+
+.app-icon-button__image--spinning {
+  animation: app-icon-button-spin 480ms linear infinite;
+}
+
+.app-icon-button__content {
+  display: inline-flex;
+  align-items: center;
+}
+
+@keyframes app-icon-button-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

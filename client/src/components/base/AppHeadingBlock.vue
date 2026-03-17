@@ -62,8 +62,8 @@ const titleSizeClass = computed(() =>
 
 <style scoped>
 .app-heading-block {
-  display: grid;
-  gap: var(--dbru-space-2);
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
 

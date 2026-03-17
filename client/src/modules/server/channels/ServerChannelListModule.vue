@@ -1,27 +1,59 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { DbrAvatar } from "dobruniaui-vue";
-import AppHeadingBlock from "../../../components/base/AppHeadingBlock.vue";
-import { useServersStore } from "../../../stores/servers";
+import AppIconButton from "../../../components/base/AppIconButton.vue";
+import ServerSettingsModal from "../ServerSettingsModal.vue";
+import settingsIcon from "../../../assets/icons/settings.svg";
 import { useServerModuleStore } from "../../../stores/serverModule";
 
-defineProps<{
-  selectedChannelId?: string | null;
-}>();
+interface ServerChannelListModuleProps {
+  selectedChannelId: string | null;
+}
+
+const props = defineProps<ServerChannelListModuleProps>();
 
 const emit = defineEmits<{
   selectChannel: [channelId: string];
 }>();
 
-const serversStore = useServersStore();
 const serverModuleStore = useServerModuleStore();
-
-const hasServers = computed(() => serversStore.items.length > 0);
-const serverSnapshot = computed(() => serverModuleStore.snapshot);
-const visibleChannels = computed(() => serverSnapshot.value?.channels ?? []);
+const isServerSettingsOpen = ref(false);
 
 /**
- * Переводит пользователя на выбранный канал внутри уже открытого сервера.
+ * Возвращает текущий initial snapshot выбранного сервера.
+ */
+const snapshot = computed(() => serverModuleStore.snapshot);
+
+/**
+ * Возвращает данные выбранного сервера.
+ */
+const selectedServer = computed(() => snapshot.value?.server ?? null);
+
+/**
+ * Возвращает список каналов выбранного сервера.
+ */
+const channels = computed(() => snapshot.value?.channels ?? []);
+
+/**
+ * Открывает модальное окно редактирования текущего сервера.
+ */
+function openServerSettings(): void {
+  if (!selectedServer.value) {
+    return;
+  }
+
+  isServerSettingsOpen.value = true;
+}
+
+/**
+ * Закрывает модальное окно редактирования сервера.
+ */
+function closeServerSettings(): void {
+  isServerSettingsOpen.value = false;
+}
+
+/**
+ * Сообщает родителю о выборе канала в списке.
  */
 function handleSelectChannel(channelId: string): void {
   emit("selectChannel", channelId);
@@ -29,178 +61,152 @@ function handleSelectChannel(channelId: string): void {
 </script>
 
 <template>
-  <section class="server-channel-list-module">
-    <template v-if="serverSnapshot">
-      <header class="server-channel-list-module__server-header">
+  <aside class="server-channel-list-module">
+    <header
+      v-if="selectedServer"
+      class="server-channel-list-module__header"
+    >
+      <div class="server-channel-list-module__server">
         <DbrAvatar
           size="md"
           shape="rounded"
-          :name="serverSnapshot.server.name"
-          :src="serverSnapshot.server.avatarUrl ?? undefined"
+          :name="selectedServer.name"
+          :src="selectedServer.avatarUrl ?? undefined"
         />
+        <span class="server-channel-list-module__server-name dbru-text-base dbru-text-main">
+          {{ selectedServer.name }}
+        </span>
+      </div>
 
-        <AppHeadingBlock
-          class="server-channel-list-module__server-meta"
-          :title="serverSnapshot.server.name"
-          title-tag="h2"
-          title-size="base"
-        />
-      </header>
-
-      <ul v-if="visibleChannels.length > 0" class="server-channel-list-module__list">
-        <li
-          v-for="channel in visibleChannels"
-          :key="channel.id"
-          class="server-channel-list-module__item"
-        >
-          <button
-            type="button"
-            class="server-channel-list-module__button"
-            :class="{
-              'server-channel-list-module__button--selected': channel.id === selectedChannelId,
-            }"
-            @click="handleSelectChannel(channel.id)"
-          >
-            <span
-              class="server-channel-list-module__mark dbru-text-sm dbru-text-muted"
-              aria-hidden="true"
-            >
-              #
-            </span>
-            <span class="server-channel-list-module__name dbru-text-base dbru-text-main">
-              {{ channel.name }}
-            </span>
-          </button>
-        </li>
-      </ul>
-    </template>
-
-    <template v-else-if="serverModuleStore.isLoading">
-      <AppHeadingBlock
-        title="Загружаем..."
-        description="Подготавливаем initial snapshot выбранного сервера."
-        title-tag="h2"
-        title-size="base"
+      <AppIconButton
+        :icon-src="settingsIcon"
+        label="Открыть настройки сервера"
+        icon-alt=""
+        @click="openServerSettings"
       />
-    </template>
+    </header>
 
-    <template v-else-if="serverModuleStore.errorMessage">
-      <AppHeadingBlock
-        class="server-channel-list-module__status server-channel-list-module__status--error"
-        title="Сервер недоступен"
-        :description="serverModuleStore.errorMessage"
-        title-tag="h2"
-        title-size="base"
-      />
-    </template>
+    <div
+      v-if="channels.length > 0"
+      class="server-channel-list-module__channels"
+    >
+      <button
+        v-for="channel in channels"
+        :key="channel.id"
+        type="button"
+        class="server-channel-list-module__channel"
+        :class="{
+          'server-channel-list-module__channel--selected':
+            channel.id === props.selectedChannelId,
+        }"
+        @click="handleSelectChannel(channel.id)"
+      >
+        <span class="server-channel-list-module__channel-name dbru-text-base dbru-text-main">
+          {{ channel.name }}
+        </span>
+      </button>
+    </div>
 
-    <template v-else-if="hasServers">
-      <AppHeadingBlock
-        title="Выберите сервер"
-        description="После выбора сервера его каналы откроются в этой колонке."
-        title-tag="h2"
-        title-size="base"
-      />
-    </template>
+    <div
+      v-else
+      class="server-channel-list-module__empty"
+    >
+      <p class="server-channel-list-module__empty-copy dbru-text-sm dbru-text-muted">
+        В этом сервере пока нет каналов.
+      </p>
+    </div>
 
-    <template v-else>
-      <AppHeadingBlock
-        title="Пока пусто"
-        description="Создайте первый сервер, чтобы открыть основной экран приложения."
-        title-tag="h2"
-        title-size="base"
-      />
-    </template>
-  </section>
+    <ServerSettingsModal
+      :is-open="isServerSettingsOpen"
+      :server="selectedServer"
+      @close="closeServerSettings"
+    />
+  </aside>
 </template>
 
 <style scoped>
 .server-channel-list-module {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: var(--dbru-space-4);
   height: 100%;
   min-height: 0;
-  padding: var(--dbru-space-5);
-  overflow: hidden;
-  background-color: var(--dbru-color-bg);
+  background: var(--dbru-color-surface);
   border-right: var(--dbru-border-size-1) solid var(--dbru-color-border);
 }
 
-.server-channel-list-module__server-header {
+.server-channel-list-module__header {
   display: flex;
   align-items: center;
-  gap: var(--dbru-space-4);
+  justify-content: space-between;
+  gap: var(--dbru-space-3);
+  padding: var(--dbru-space-4);
+  border-bottom: var(--dbru-border-size-1) solid var(--dbru-color-border);
 }
 
-.server-channel-list-module__status--error :deep(.app-heading-block__description) {
-  color: var(--dbru-color-error);
-}
-
-.server-channel-list-module__list {
-  display: grid;
-  gap: var(--dbru-space-2);
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  align-content: start;
-  overflow: auto;
-}
-
-.server-channel-list-module__item {
+.server-channel-list-module__server {
+  display: flex;
+  align-items: center;
+  gap: var(--dbru-space-3);
   min-width: 0;
 }
 
-.server-channel-list-module__button {
-  display: flex;
-  align-items: center;
-  gap: var(--dbru-space-2);
-  width: 100%;
-  padding: var(--dbru-space-3);
-  border: 0;
-  border-radius: var(--dbru-radius-md);
-  background: transparent;
-  color: var(--dbru-color-text);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.server-channel-list-module__button:hover {
-  background: var(--dbru-color-bg);
-}
-
-.server-channel-list-module__button--selected {
-  background: var(--dbru-color-surface);
-  box-shadow: inset 0 0 0 var(--dbru-border-size-1) var(--dbru-color-primary);
-}
-
-.server-channel-list-module__name {
+.server-channel-list-module__server-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@media (max-width: 960px) {
-  .server-channel-list-module {
-    border-right: var(--dbru-border-size-1) solid var(--dbru-color-border);
-    border-top-right-radius: var(--dbru-radius-md);
-    border-bottom-left-radius: 0;
-  }
+.server-channel-list-module__channels {
+  display: grid;
+  align-content: start;
+  gap: var(--dbru-space-2);
+  min-height: 0;
+  padding: var(--dbru-space-4);
+  overflow: auto;
 }
 
-@media (max-width: 640px) {
-  .server-channel-list-module {
-    padding: var(--dbru-space-4);
-  }
+.server-channel-list-module__channel {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: var(--dbru-space-3) var(--dbru-space-4);
+  border: 0;
+  border-radius: var(--dbru-radius-md);
+  background: transparent;
+  color: var(--dbru-color-text);
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
 
-  .server-channel-list-module__server-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
+.server-channel-list-module__channel:hover {
+  background: var(--dbru-color-bg);
+}
+
+.server-channel-list-module__channel--selected {
+  background: var(--dbru-color-bg);
+}
+
+.server-channel-list-module__channel-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.server-channel-list-module__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: var(--dbru-space-5);
+}
+
+.server-channel-list-module__empty-copy {
+  margin: 0;
+  text-align: center;
 }
 </style>
