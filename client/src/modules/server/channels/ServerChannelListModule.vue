@@ -33,7 +33,7 @@ function handleSelectChannel(channelId: string): void {
     <template v-if="serverSnapshot">
       <header class="server-channel-list-module__server-header">
         <DbrAvatar
-          size="lg"
+          size="md"
           shape="rounded"
           :name="serverSnapshot.server.name"
           :src="serverSnapshot.server.avatarUrl ?? undefined"
@@ -73,14 +73,6 @@ function handleSelectChannel(channelId: string): void {
           </button>
         </li>
       </ul>
-
-      <AppHeadingBlock
-        v-else
-        title="Каналы пока пустые"
-        description="В этом сервере пока нет каналов."
-        title-tag="h2"
-        title-size="base"
-      />
     </template>
 
     <template v-else-if="serverModuleStore.isLoading">
@@ -132,12 +124,7 @@ function handleSelectChannel(channelId: string): void {
   padding: var(--dbru-space-5);
   overflow: hidden;
   background-color: var(--dbru-color-bg);
-  border-top: var(--dbru-border-size-1) solid var(--dbru-color-border);
-  border-right: 0;
-  border-bottom: var(--dbru-border-size-1) solid var(--dbru-color-border);
-  border-left: var(--dbru-border-size-1) solid var(--dbru-color-border);
-  border-top-left-radius: var(--dbru-radius-md);
-  border-bottom-left-radius: var(--dbru-radius-md);
+  border-right: var(--dbru-border-size-1) solid var(--dbru-color-border);
 }
 
 .server-channel-list-module__server-header {

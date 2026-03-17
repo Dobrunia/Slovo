@@ -5,9 +5,9 @@ import rawHeadphonesIcon from "../../assets/icons/headphones.svg?raw";
 import rawHeadphonesOffIcon from "../../assets/icons/headphones-off.svg?raw";
 import rawMicIcon from "../../assets/icons/mic.svg?raw";
 import rawMicOffIcon from "../../assets/icons/mic-off.svg?raw";
+import AppHeadingBlock from "../../components/base/AppHeadingBlock.vue";
+import AppIconButton from "../../components/base/AppIconButton.vue";
 import { useAuthStore } from "../../stores/auth";
-import AppHeadingBlock from "./AppHeadingBlock.vue";
-import AppIconButton from "./AppIconButton.vue";
 
 const authStore = useAuthStore();
 const isMicrophoneMuted = ref(false);
@@ -42,8 +42,7 @@ function toggleHeadphones(): void {
 }
 
 /**
- * Нормализует SVG-иконку для inline-render: убирает фоновые rect-элементы
- * и переводит основные stroke/fill-цвета в currentColor.
+ * Нормализует SVG-иконку для inline-render и переводит цвета в currentColor.
  */
 function sanitizeIconMarkup(markup: string): string {
   return markup
@@ -54,8 +53,8 @@ function sanitizeIconMarkup(markup: string): string {
 </script>
 
 <template>
-  <section class="current-user-control-panel">
-    <div class="current-user-control-panel__profile">
+  <section class="current-user-control-module">
+    <div class="current-user-control-module__profile">
       <DbrAvatar
         size="md"
         shape="rounded"
@@ -64,7 +63,7 @@ function sanitizeIconMarkup(markup: string): string {
       />
 
       <AppHeadingBlock
-        class="current-user-control-panel__copy"
+        class="current-user-control-module__copy"
         :title="profileName"
         :description="profileHandle"
         title-tag="h2"
@@ -72,7 +71,7 @@ function sanitizeIconMarkup(markup: string): string {
       />
     </div>
 
-    <div class="current-user-control-panel__actions">
+    <div class="current-user-control-module__actions">
       <AppIconButton
         :label="isMicrophoneMuted ? 'Включить микрофон' : 'Выключить микрофон'"
         :tone="isMicrophoneMuted ? 'danger' : 'default'"
@@ -80,7 +79,7 @@ function sanitizeIconMarkup(markup: string): string {
       >
         <template #icon>
           <span
-            class="current-user-control-panel__icon"
+            class="current-user-control-module__icon"
             aria-hidden="true"
             v-html="microphoneMarkup"
           />
@@ -94,7 +93,7 @@ function sanitizeIconMarkup(markup: string): string {
       >
         <template #icon>
           <span
-            class="current-user-control-panel__icon"
+            class="current-user-control-module__icon"
             aria-hidden="true"
             v-html="headphonesMarkup"
           />
@@ -105,49 +104,48 @@ function sanitizeIconMarkup(markup: string): string {
 </template>
 
 <style scoped>
-.current-user-control-panel {
+.current-user-control-module {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--dbru-space-4);
   padding: var(--dbru-space-4) var(--dbru-space-5);
   border-bottom: var(--dbru-border-size-1) solid var(--dbru-color-border);
+  background: var(--dbru-color-bg);
 }
 
-.current-user-control-panel__profile {
+.current-user-control-module__profile {
   display: flex;
   align-items: center;
   gap: var(--dbru-space-3);
   min-width: 0;
 }
 
-.current-user-control-panel__copy {
-  display: grid;
-  gap: var(--dbru-space-1);
+.current-user-control-module__copy {
   min-width: 0;
 }
 
-.current-user-control-panel__copy :deep(.app-heading-block__title),
-.current-user-control-panel__copy :deep(.app-heading-block__description) {
+.current-user-control-module__copy :deep(.app-heading-block__title),
+.current-user-control-module__copy :deep(.app-heading-block__description) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.current-user-control-panel__actions {
+.current-user-control-module__actions {
   display: inline-flex;
   align-items: center;
   gap: var(--dbru-space-2);
   flex-shrink: 0;
 }
 
-.current-user-control-panel__icon {
+.current-user-control-module__icon {
   display: inline-flex;
   width: 1.375rem;
   height: 1.375rem;
 }
 
-.current-user-control-panel__icon :deep(svg) {
+.current-user-control-module__icon :deep(svg) {
   display: block;
   width: 100%;
   height: 100%;
@@ -157,7 +155,7 @@ function sanitizeIconMarkup(markup: string): string {
 }
 
 @media (max-width: 640px) {
-  .current-user-control-panel {
+  .current-user-control-module {
     padding: var(--dbru-space-4);
   }
 }

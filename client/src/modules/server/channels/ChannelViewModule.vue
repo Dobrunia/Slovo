@@ -1,19 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import CurrentUserControlPanel from "../../../components/base/CurrentUserControlPanel.vue";
-import { useServersStore } from "../../../stores/servers";
+import AppHeadingBlock from "../../../components/base/AppHeadingBlock.vue";
 import { useServerModuleStore } from "../../../stores/serverModule";
-import ChannelParticipantsModule from "./ChannelParticipantsModule.vue";
-import ChannelViewportModule from "./ChannelViewportModule.vue";
 
 const props = defineProps<{
   selectedChannelId?: string | null;
 }>();
 
-const serversStore = useServersStore();
 const serverModuleStore = useServerModuleStore();
-
-const hasServers = computed(() => serversStore.items.length > 0);
 const serverSnapshot = computed(() => serverModuleStore.snapshot);
 const selectedChannel = computed(() =>
   serverSnapshot.value?.channels.find((channel) => channel.id === props.selectedChannelId) ?? null,
@@ -22,34 +16,52 @@ const selectedChannel = computed(() =>
 
 <template>
   <section class="channel-view-module">
-    <CurrentUserControlPanel />
-
-    <div class="channel-view-module__body">
-      <ChannelViewportModule
-        :has-servers="hasServers"
-        :has-server-snapshot="Boolean(serverSnapshot)"
-        :is-loading="serverModuleStore.isLoading"
-        :selected-channel="selectedChannel"
+    <template v-if="selectedChannel">
+      <AppHeadingBlock
+        class="channel-view-module__copy"
+        :title="selectedChannel.name"
+        description="Здесь позже появятся участники канала, их камеры, screen share и связанные панели."
+        title-tag="h1"
+        centered
       />
+    </template>
 
-      <ChannelParticipantsModule
-        :has-server-snapshot="Boolean(serverSnapshot)"
-        :selected-channel="selectedChannel"
+    <template v-else-if="serverSnapshot">
+      <AppHeadingBlock
+        class="channel-view-module__copy"
+        title="Канал не выбран"
+        description="Выберите нужный канал слева."
+        title-tag="h1"
+        centered
       />
-    </div>
+    </template>
+
+    <template v-else-if="serverModuleStore.isLoading">
+      <AppHeadingBlock
+        class="channel-view-module__copy"
+        title="Загружаем сервер"
+        title-tag="h1"
+        centered
+      />
+    </template>
+
+    <template v-else>
+      <AppHeadingBlock
+        class="channel-view-module__copy"
+        title="Область канала пока пустая"
+        title-tag="h1"
+        centered
+      />
+    </template>
   </section>
 </template>
 
 <style scoped>
 .channel-view-module {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  place-items: center;
   height: 100%;
   min-height: 0;
-  overflow: hidden;
-  border: var(--dbru-border-size-1) solid var(--dbru-color-border);
-  border-top-right-radius: var(--dbru-radius-md);
-  border-bottom-right-radius: var(--dbru-radius-md);
   background-color: var(--dbru-color-bg);
   background-image: url("../../../assets/global_back.png");
   background-position: center;
@@ -57,25 +69,20 @@ const selectedChannel = computed(() =>
   background-size: cover;
 }
 
-.channel-view-module__body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 18rem;
-  min-height: 0;
-}
-
-@media (max-width: 1100px) {
-  .channel-view-module__body {
-    grid-template-columns: 1fr;
-  }
+.channel-view-module__copy {
+  max-width: 30rem;
+  padding: var(--dbru-space-5);
 }
 
 @media (max-width: 960px) {
   .channel-view-module {
     min-height: 18rem;
-    border-top: 0;
-    border-top-right-radius: 0;
-    border-top-left-radius: 0;
-    border-bottom-left-radius: var(--dbru-radius-md);
+  }
+}
+
+@media (max-width: 640px) {
+  .channel-view-module__copy {
+    padding: var(--dbru-space-4);
   }
 }
 </style>

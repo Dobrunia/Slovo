@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import AppMainHeader from "../modules/app/AppMainHeader.vue";
-import ServerWorkspace from "../modules/server/ServerWorkspace.vue";
+import AppHeaderLayout from "../layouts/AppHeaderLayout.vue";
+import AuthenticatedLayout from "../layouts/AuthenticatedLayout.vue";
+import AppHeaderActionsModule from "../modules/app/AppHeaderActionsModule.vue";
+import ServerRailModule from "../modules/server/ServerRailModule.vue";
+import ServerChannelListModule from "../modules/server/channels/ServerChannelListModule.vue";
+import ChannelViewModule from "../modules/server/channels/ChannelViewModule.vue";
 import UserSettingsModal from "../modules/settings/UserSettingsModal.vue";
 import CreateServerModal from "../modules/server/CreateServerModal.vue";
+import CurrentUserControlModule from "../modules/user/CurrentUserControlModule.vue";
 import { APP_HOME_ROUTE_PATH } from "../constants";
 import { APP_HOME_ROUTE_NAME } from "../router/serverRoutes";
 import {
@@ -132,18 +137,37 @@ async function syncRouteSelection(
 
 <template>
   <div class="home-page">
-    <AppMainHeader
-      :selected-server-id="selectedServerId"
-      @add-server="handleAddServer"
-      @open-settings="toggleSettings"
-    />
+    <AuthenticatedLayout>
+      <template #header>
+        <AppHeaderLayout>
+          <template #primary>
+            <ServerRailModule :selected-server-id="selectedServerId" />
+          </template>
 
-    <div class="home-page__body">
-      <ServerWorkspace
-        :selected-channel-id="selectedChannelId"
-        @select-channel="handleSelectChannel"
-      />
-    </div>
+          <template #secondary>
+            <AppHeaderActionsModule
+              @add-server="handleAddServer"
+              @open-settings="toggleSettings"
+            />
+          </template>
+        </AppHeaderLayout>
+      </template>
+
+      <template #sidebar>
+        <ServerChannelListModule
+          :selected-channel-id="selectedChannelId"
+          @select-channel="handleSelectChannel"
+        />
+      </template>
+
+      <template #user-control>
+        <CurrentUserControlModule />
+      </template>
+
+      <template #content>
+        <ChannelViewModule :selected-channel-id="selectedChannelId" />
+      </template>
+    </AuthenticatedLayout>
 
     <UserSettingsModal :is-open="isSettingsOpen" @close="closeSettings" />
     <CreateServerModal
@@ -156,17 +180,9 @@ async function syncRouteSelection(
 
 <style scoped>
 .home-page {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
   height: 100dvh;
   min-height: 100dvh;
   box-sizing: border-box;
-  overflow: hidden;
-}
-
-.home-page__body {
-  display: grid;
-  min-height: 0;
   overflow: hidden;
 }
 </style>

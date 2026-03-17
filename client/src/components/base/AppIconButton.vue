@@ -56,7 +56,7 @@ withDefaults(defineProps<AppIconButtonProps>(), {
 }
 
 .app-icon-button:hover {
-  background: var(--dbru-color-surface);
+  background-color: color-mix(in srgb, var(--dbru-color-primary) 12%, transparent);
 }
 
 .app-icon-button:focus-visible {
