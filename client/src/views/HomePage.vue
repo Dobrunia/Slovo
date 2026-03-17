@@ -37,6 +37,8 @@ const serversStore = useServersStore();
 const serverModuleStore = useServerModuleStore();
 let stopServerLiveSubscription: (() => Promise<void>) | null = null;
 let serverLiveSubscriptionVersion = 0;
+let requestedServerLiveSubscriptionTarget: string | null = null;
+let activeServerLiveSubscriptionTarget: string | null = null;
 const availableServerIds = computed(() => serversStore.items.map((server) => server.id));
 const selectedServerId = computed(() => readSelectedServerIdFromRouteParams(route.params));
 const selectedChannelId = computed(() => readSelectedChannelIdFromRouteParams(route.params));
@@ -264,6 +266,16 @@ async function switchServerLiveSubscription(
   nextServerId: string | null,
   nextSessionToken: string | null,
 ): Promise<void> {
+  const nextSubscriptionTarget =
+    nextServerId && nextSessionToken
+      ? `${nextSessionToken}:${nextServerId}`
+      : null;
+
+  if (nextSubscriptionTarget === requestedServerLiveSubscriptionTarget) {
+    return;
+  }
+
+  requestedServerLiveSubscriptionTarget = nextSubscriptionTarget;
   serverLiveSubscriptionVersion += 1;
   const currentVersion = serverLiveSubscriptionVersion;
 
@@ -272,32 +284,42 @@ async function switchServerLiveSubscription(
     stopServerLiveSubscription = null;
   }
 
+  activeServerLiveSubscriptionTarget = null;
   serverModuleStore.presenceMembers = [];
 
-  if (!nextSessionToken || !nextServerId) {
+  if (!nextSessionToken || !nextServerId || !nextSubscriptionTarget) {
     return;
   }
 
-  const stop = await subscribeToServerLiveState({
-    sessionToken: nextSessionToken,
-    serverId: nextServerId,
-    onServerUpdated: (payload) => {
-      serverModuleStore.applyLiveServerUpdated(payload);
-    },
-    onChannelsUpdated: (payload) => {
-      serverModuleStore.applyLiveChannelsUpdated(payload);
-    },
-    onPresenceUpdated: (payload) => {
-      serverModuleStore.applyPresenceUpdated(payload);
-    },
-  });
+  try {
+    const stop = await subscribeToServerLiveState({
+      sessionToken: nextSessionToken,
+      serverId: nextServerId,
+      onServerUpdated: (payload) => {
+        serverModuleStore.applyLiveServerUpdated(payload);
+      },
+      onChannelsUpdated: (payload) => {
+        serverModuleStore.applyLiveChannelsUpdated(payload);
+      },
+      onPresenceUpdated: (payload) => {
+        serverModuleStore.applyPresenceUpdated(payload);
+      },
+    });
 
-  if (currentVersion !== serverLiveSubscriptionVersion) {
-    await stop();
-    return;
+    if (currentVersion !== serverLiveSubscriptionVersion) {
+      await stop();
+      return;
+    }
+
+    stopServerLiveSubscription = stop;
+    activeServerLiveSubscriptionTarget = nextSubscriptionTarget;
+  } catch (error) {
+    if (currentVersion === serverLiveSubscriptionVersion) {
+      requestedServerLiveSubscriptionTarget = activeServerLiveSubscriptionTarget;
+    }
+
+    throw error;
   }
-
-  stopServerLiveSubscription = stop;
 }
 
 onBeforeUnmount(() => {
@@ -306,6 +328,8 @@ onBeforeUnmount(() => {
     stopServerLiveSubscription = null;
   }
 
+  requestedServerLiveSubscriptionTarget = null;
+  activeServerLiveSubscriptionTarget = null;
   resetRealtimeRuntime();
 });
 </script>
