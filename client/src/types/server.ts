@@ -13,3 +13,17 @@ export interface ClientServerListItem {
   isPublic: boolean;
   role: ServerMembershipRole;
 }
+
+/**
+ * Входные данные для создания нового сервера на клиенте.
+ */
+export interface ClientCreateServerInput {
+  name: string;
+}
+
+/**
+ * Результат успешного создания сервера через GraphQL.
+ */
+export interface ClientCreateServerResult {
+  server: ClientServerListItem;
+}

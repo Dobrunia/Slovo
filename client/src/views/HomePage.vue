@@ -4,9 +4,11 @@ import AppIconButton from "../components/base/AppIconButton.vue";
 import addServerIcon from "../assets/icons/add-server.svg";
 import settingsIcon from "../assets/icons/settings.svg";
 import UserSettingsModal from "../modules/settings/UserSettingsModal.vue";
+import CreateServerModal from "../modules/servers/CreateServerModal.vue";
 import ServerRailModule from "../modules/servers/ServerRailModule.vue";
 
 const isSettingsOpen = ref(false);
+const isCreateServerOpen = ref(false);
 
 /**
  * Переключает видимость модального окна с настройками пользователя.
@@ -23,10 +25,17 @@ function closeSettings(): void {
 }
 
 /**
- * Временная заглушка до реализации создания сервера.
+ * Открывает модальное окно создания нового сервера.
  */
 function handleAddServer(): void {
-  // Действие появится в следующем наборе задач.
+  isCreateServerOpen.value = true;
+}
+
+/**
+ * Закрывает модальное окно создания нового сервера.
+ */
+function closeCreateServer(): void {
+  isCreateServerOpen.value = false;
 }
 </script>
 
@@ -74,6 +83,7 @@ function handleAddServer(): void {
     </div>
 
     <UserSettingsModal :is-open="isSettingsOpen" @close="closeSettings" />
+    <CreateServerModal :is-open="isCreateServerOpen" @close="closeCreateServer" />
   </div>
 </template>
 
