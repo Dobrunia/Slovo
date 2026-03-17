@@ -270,6 +270,14 @@ async function handleDeleteServer(): Promise<void> {
     return;
   }
 
+  const isDeletionConfirmed = window.confirm(
+    "Удаление сервера необратимо. Вы уверены, что хотите удалить сервер?",
+  );
+
+  if (!isDeletionConfirmed) {
+    return;
+  }
+
   try {
     await serverModuleStore.deleteSelectedServer();
     closeModal();

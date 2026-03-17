@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import { DbrAvatar } from "dobruniaui-vue";
 import AppIconButton from "../../../components/base/AppIconButton.vue";
 import ServerSettingsModal from "../ServerSettingsModal.vue";
+import ServerChannelListItem from "./ServerChannelListItem.vue";
 import settingsIcon from "../../../assets/icons/settings.svg";
 import { useServerModuleStore } from "../../../stores/serverModule";
 
@@ -92,21 +93,14 @@ function handleSelectChannel(channelId: string): void {
       v-if="channels.length > 0"
       class="server-channel-list-module__channels"
     >
-      <button
+      <ServerChannelListItem
         v-for="channel in channels"
         :key="channel.id"
-        type="button"
-        class="server-channel-list-module__channel"
-        :class="{
-          'server-channel-list-module__channel--selected':
-            channel.id === props.selectedChannelId,
-        }"
-        @click="handleSelectChannel(channel.id)"
-      >
-        <span class="server-channel-list-module__channel-name dbru-text-base dbru-text-main">
-          {{ channel.name }}
-        </span>
-      </button>
+        :channel-id="channel.id"
+        :name="channel.name"
+        :is-selected="channel.id === props.selectedChannelId"
+        @select="handleSelectChannel"
+      />
     </div>
 
     <div
@@ -165,37 +159,6 @@ function handleSelectChannel(channelId: string): void {
   min-height: 0;
   padding: var(--dbru-space-4);
   overflow: auto;
-}
-
-.server-channel-list-module__channel {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-width: 0;
-  padding: var(--dbru-space-3) var(--dbru-space-4);
-  border: 0;
-  border-radius: var(--dbru-radius-md);
-  background: transparent;
-  color: var(--dbru-color-text);
-  cursor: pointer;
-  transition:
-    background-color 160ms ease,
-    color 160ms ease;
-}
-
-.server-channel-list-module__channel:hover {
-  background: var(--dbru-color-bg);
-}
-
-.server-channel-list-module__channel--selected {
-  background: var(--dbru-color-bg);
-}
-
-.server-channel-list-module__channel-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .server-channel-list-module__empty {
