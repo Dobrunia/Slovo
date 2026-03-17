@@ -28,9 +28,13 @@
             :key="server.id"
             class="server-rail__item"
           >
-            <button
-              type="button"
+            <RouterLink
+              :to="buildServerRoute(server.id)"
+              replace
               class="server-rail__server-button"
+              :class="{
+                'server-rail__server-button--selected': server.id === selectedServerId,
+              }"
               :aria-label="server.name"
               :title="server.name"
             >
@@ -40,7 +44,7 @@
                 size="md"
                 shape="rounded"
               />
-            </button>
+            </RouterLink>
           </li>
         </ul>
       </div>
@@ -52,7 +56,7 @@
         aria-label="Перейти к началу списка серверов"
         @click="scrollToStart"
       >
-        <span class="server-rail__nav-glyph" aria-hidden="true">‹</span>
+        <span class="server-rail__nav-glyph dbru-text-lg dbru-text-main" aria-hidden="true">‹</span>
       </button>
 
       <button
@@ -62,7 +66,7 @@
         aria-label="Перейти к концу списка серверов"
         @click="scrollToEnd"
       >
-        <span class="server-rail__nav-glyph" aria-hidden="true">›</span>
+        <span class="server-rail__nav-glyph dbru-text-lg dbru-text-main" aria-hidden="true">›</span>
       </button>
 
       <div
@@ -80,10 +84,16 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { RouterLink } from "vue-router";
 import { DbrAvatar } from "dobruniaui-vue";
 import { ENABLE_SERVER_RAIL_MOCKS, SERVER_RAIL_MOCK_SERVERS } from "./mockServers";
+import { buildAppServerRoute } from "../../router/serverRoutes";
 import { useAuthStore } from "../../stores/auth";
 import { useServersStore } from "../../stores/servers";
+
+defineProps<{
+  selectedServerId?: string | null;
+}>();
 
 const authStore = useAuthStore();
 const serversStore = useServersStore();
@@ -101,9 +111,9 @@ const displayServers = computed(() => {
     return serversStore.items;
   }
 
-  // if (ENABLE_SERVER_RAIL_MOCKS) {
-  //   return SERVER_RAIL_MOCK_SERVERS;
-  // }
+  if (ENABLE_SERVER_RAIL_MOCKS) {
+    return SERVER_RAIL_MOCK_SERVERS;
+  }
 
   return [];
 });
@@ -139,6 +149,13 @@ const rangeThumbStyle = computed(() => {
 });
 
 /**
+ * Возвращает URL выбранного сервера для семантической навигации через ссылку.
+ */
+function buildServerRoute(serverId: string): string {
+  return buildAppServerRoute(serverId);
+}
+
+/**
  * Преобразует вертикальное колесико мыши в горизонтальный скролл списка серверов.
  */
 function handleWheelScroll(event: WheelEvent): void {
@@ -154,8 +171,8 @@ function handleWheelScroll(event: WheelEvent): void {
     return;
   }
 
-  const maxScrollLeft = serverViewport.scrollWidth - serverViewport.clientWidth;
-  const nextScrollLeft = clampScrollLeft(serverViewport.scrollLeft + delta, maxScrollLeft);
+  const maxAllowedScrollLeft = serverViewport.scrollWidth - serverViewport.clientWidth;
+  const nextScrollLeft = clampScrollLeft(serverViewport.scrollLeft + delta, maxAllowedScrollLeft);
 
   serverViewport.scrollLeft = nextScrollLeft;
   syncScrollState();
@@ -186,8 +203,8 @@ function normalizeWheelDelta(event: WheelEvent, containerWidth: number): number 
 /**
  * Ограничивает scrollLeft допустимым диапазоном контейнера.
  */
-function clampScrollLeft(nextScrollLeft: number, maxScrollLeft: number): number {
-  return Math.min(Math.max(nextScrollLeft, 0), maxScrollLeft);
+function clampScrollLeft(nextScrollLeft: number, maxAllowedScrollLeft: number): number {
+  return Math.min(Math.max(nextScrollLeft, 0), maxAllowedScrollLeft);
 }
 
 /**
@@ -349,22 +366,30 @@ onBeforeUnmount(() => {
 .server-rail__server-button {
   display: grid;
   place-items: center;
-  padding: 0;
+  padding: var(--dbru-space-1);
   border: 0;
   border-radius: var(--dbru-radius-md);
   background: transparent;
+  box-shadow: inset 0 0 0 var(--dbru-border-size-1) transparent;
+  text-decoration: none;
   cursor: pointer;
   transition:
     background-color 160ms ease,
+    box-shadow 160ms ease,
     transform 160ms ease;
 }
 
 .server-rail__server-button:hover {
-  background: color-mix(in srgb, var(--dbru-color-border) 24%, transparent);
+  background: var(--dbru-color-bg);
+}
+
+.server-rail__server-button--selected {
+  background: var(--dbru-color-surface);
+  box-shadow: inset 0 0 0 var(--dbru-border-size-1) var(--dbru-color-primary);
 }
 
 .server-rail__server-button:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--dbru-color-primary) 44%, transparent);
+  outline: var(--dbru-border-size-2) solid var(--dbru-color-focus);
   outline-offset: 2px;
 }
 
@@ -384,7 +409,7 @@ onBeforeUnmount(() => {
   padding: 0;
   border: 0;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--dbru-color-surface) 78%, transparent);
+  background: var(--dbru-color-surface);
   color: var(--dbru-color-text);
   box-shadow: var(--dbru-shadow-sm);
   cursor: pointer;
@@ -397,11 +422,11 @@ onBeforeUnmount(() => {
 }
 
 .server-rail__nav:hover {
-  background: color-mix(in srgb, var(--dbru-color-surface) 92%, transparent);
+  background: var(--dbru-color-bg);
 }
 
 .server-rail__nav:focus-visible {
-  outline: 2px solid var(--dbru-color-focus);
+  outline: var(--dbru-border-size-2) solid var(--dbru-color-focus);
   outline-offset: 2px;
 }
 
@@ -417,11 +442,6 @@ onBeforeUnmount(() => {
   right: var(--dbru-space-1);
 }
 
-.server-rail__nav-glyph {
-  font-size: 1.35rem;
-  line-height: 1;
-}
-
 .server-rail__range {
   position: absolute;
   right: var(--dbru-space-2);
@@ -434,7 +454,7 @@ onBeforeUnmount(() => {
   display: block;
   height: 3px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--dbru-color-border) 36%, transparent);
+  background: var(--dbru-color-border);
   overflow: hidden;
 }
 
@@ -442,7 +462,7 @@ onBeforeUnmount(() => {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--dbru-color-primary) 42%, transparent);
+  background: var(--dbru-color-primary);
   transition:
     transform 140ms ease,
     width 140ms ease;

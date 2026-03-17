@@ -7,6 +7,13 @@ import {
   REGISTER_ROUTE_PATH,
 } from "../constants";
 import { resolveRouteAccess } from "./guards";
+import {
+  APP_HOME_ROUTE_NAME,
+  APP_SERVER_CHANNEL_ROUTE_NAME,
+  APP_SERVER_CHANNEL_ROUTE_PATH,
+  APP_SERVER_ROUTE_NAME,
+  APP_SERVER_ROUTE_PATH,
+} from "./serverRoutes";
 import { pinia } from "../stores/pinia";
 import { useAuthStore } from "../stores/auth";
 import HomePage from "../views/HomePage.vue";
@@ -49,6 +56,25 @@ export const router = createRouter({
     },
     {
       path: APP_HOME_ROUTE_PATH,
+      name: APP_HOME_ROUTE_NAME,
+      component: HomePage,
+      meta: {
+        requiresAuth: true,
+        title: DEFAULT_CLIENT_APP_TITLE,
+      },
+    },
+    {
+      path: APP_SERVER_ROUTE_PATH,
+      name: APP_SERVER_ROUTE_NAME,
+      component: HomePage,
+      meta: {
+        requiresAuth: true,
+        title: DEFAULT_CLIENT_APP_TITLE,
+      },
+    },
+    {
+      path: APP_SERVER_CHANNEL_ROUTE_PATH,
+      name: APP_SERVER_CHANNEL_ROUTE_NAME,
       component: HomePage,
       meta: {
         requiresAuth: true,

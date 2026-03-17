@@ -1,14 +1,57 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import AppIconButton from "../components/base/AppIconButton.vue";
-import addServerIcon from "../assets/icons/add-server.svg";
-import settingsIcon from "../assets/icons/settings.svg";
+import { computed, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import AppMainHeader from "../modules/app/AppMainHeader.vue";
+import ServerWorkspace from "../modules/server/ServerWorkspace.vue";
 import UserSettingsModal from "../modules/settings/UserSettingsModal.vue";
-import CreateServerModal from "../modules/servers/CreateServerModal.vue";
-import ServerRailModule from "../modules/servers/ServerRailModule.vue";
+import CreateServerModal from "../modules/server/CreateServerModal.vue";
+import { APP_HOME_ROUTE_PATH } from "../constants";
+import { APP_HOME_ROUTE_NAME } from "../router/serverRoutes";
+import {
+  buildAppServerChannelRoute,
+  buildAppServerRoute,
+  readSelectedChannelIdFromRouteParams,
+  readSelectedServerIdFromRouteParams,
+} from "../router/serverRoutes";
+import { useServersStore } from "../stores/servers";
+import { useServerModuleStore } from "../stores/serverModule";
 
+const route = useRoute();
+const router = useRouter();
 const isSettingsOpen = ref(false);
 const isCreateServerOpen = ref(false);
+const serversStore = useServersStore();
+const serverModuleStore = useServerModuleStore();
+const availableServerIds = computed(() => serversStore.items.map((server) => server.id));
+const selectedServerId = computed(() => readSelectedServerIdFromRouteParams(route.params));
+const selectedChannelId = computed(() => readSelectedChannelIdFromRouteParams(route.params));
+
+watch(
+  [availableServerIds, selectedServerId],
+  ([serverIds, currentSelectedServerId]) => {
+    void syncRouteSelection(serverIds, currentSelectedServerId);
+  },
+  {
+    immediate: true,
+  },
+);
+
+watch(
+  [selectedServerId, selectedChannelId, () => serverModuleStore.snapshot],
+  ([currentSelectedServerId, currentSelectedChannelId, snapshot]) => {
+    if (!currentSelectedServerId || !currentSelectedChannelId || !snapshot) {
+      return;
+    }
+
+    const hasSelectedChannel = snapshot.channels.some(
+      (channel) => channel.id === currentSelectedChannelId,
+    );
+
+    if (!hasSelectedChannel) {
+      void router.replace(buildAppServerRoute(currentSelectedServerId));
+    }
+  },
+);
 
 /**
  * Переключает видимость модального окна с настройками пользователя.
@@ -37,148 +80,93 @@ function handleAddServer(): void {
 function closeCreateServer(): void {
   isCreateServerOpen.value = false;
 }
+
+/**
+ * Открывает выбранный канал в URL внутри текущего сервера.
+ */
+function handleSelectChannel(channelId: string): void {
+  if (!selectedServerId.value) {
+    return;
+  }
+
+  void router.replace(buildAppServerChannelRoute(selectedServerId.value, channelId));
+}
+
+/**
+ * После создания сервера сразу открывает его в основном модуле.
+ */
+function handleServerCreated(serverId: string): void {
+  void router.replace(buildAppServerRoute(serverId));
+}
+
+/**
+ * Синхронизирует route selection и initial load модуля сервера.
+ */
+async function syncRouteSelection(
+  serverIds: string[],
+  currentSelectedServerId: string | null,
+): Promise<void> {
+  if (serverIds.length === 0) {
+    serverModuleStore.reset();
+
+    if (route.name !== APP_HOME_ROUTE_NAME) {
+      await router.replace(APP_HOME_ROUTE_PATH);
+    }
+
+    return;
+  }
+
+  const nextSelectedServerId =
+    currentSelectedServerId && serverIds.includes(currentSelectedServerId)
+      ? currentSelectedServerId
+      : serverIds[0];
+
+  if (currentSelectedServerId !== nextSelectedServerId) {
+    await router.replace(buildAppServerRoute(nextSelectedServerId));
+    return;
+  }
+
+  await serverModuleStore.openServer(nextSelectedServerId);
+}
 </script>
 
 <template>
   <div class="home-page">
-    <header class="home-page__header">
-      <div class="home-page__rail">
-        <ServerRailModule />
-      </div>
-
-      <div class="home-page__actions">
-        <AppIconButton
-          :icon-src="addServerIcon"
-          label="Добавить сервер"
-          icon-alt=""
-          @click="handleAddServer"
-        />
-
-        <AppIconButton
-          :icon-src="settingsIcon"
-          label="Открыть настройки"
-          icon-alt=""
-          @click="toggleSettings"
-        />
-      </div>
-    </header>
+    <AppMainHeader
+      :selected-server-id="selectedServerId"
+      @add-server="handleAddServer"
+      @open-settings="toggleSettings"
+    />
 
     <div class="home-page__body">
-      <aside class="home-page__sidebar">
-        <section class="home-page__panel">
-          <p class="home-page__eyebrow">Список каналов</p>
-          <h2 class="home-page__panel-title">Появится позже</h2>
-        </section>
-
-        <section class="home-page__panel">
-          <p class="home-page__eyebrow">Превью аккаунта</p>
-          <h2 class="home-page__panel-title">Появится позже</h2>
-        </section>
-      </aside>
-
-      <section class="home-page__stage">
-        <p class="home-page__eyebrow">Главная зона сервера</p>
-        <h1 class="home-page__stage-title">Контент появится позже</h1>
-      </section>
+      <ServerWorkspace
+        :selected-channel-id="selectedChannelId"
+        @select-channel="handleSelectChannel"
+      />
     </div>
 
     <UserSettingsModal :is-open="isSettingsOpen" @close="closeSettings" />
-    <CreateServerModal :is-open="isCreateServerOpen" @close="closeCreateServer" />
+    <CreateServerModal
+      :is-open="isCreateServerOpen"
+      @close="closeCreateServer"
+      @created="handleServerCreated"
+    />
   </div>
 </template>
 
 <style scoped>
 .home-page {
   display: grid;
-  gap: var(--dbru-space-4);
-}
-
-.home-page__header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--dbru-space-4);
-  align-items: center;
-  padding-inline: var(--dbru-space-4);
-}
-
-.home-page__rail {
-  min-width: 0;
-}
-
-.home-page__actions {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--dbru-space-2);
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100dvh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .home-page__body {
   display: grid;
-  grid-template-columns: minmax(16rem, 20rem) minmax(0, 1fr);
-  gap: var(--dbru-space-4);
   min-height: 0;
-}
-
-.home-page__sidebar {
-  display: grid;
-  gap: var(--dbru-space-4);
-  min-height: 0;
-}
-
-.home-page__panel,
-.home-page__stage {
-  display: grid;
-  gap: var(--dbru-space-3);
-  align-content: start;
-  min-height: 12rem;
-  padding: var(--dbru-space-5);
-  border: 1px solid var(--dbru-color-border);
-  border-radius: var(--dbru-radius-md);
-  background: color-mix(in srgb, var(--dbru-color-bg) 92%, white);
-}
-
-.home-page__stage {
-  min-height: 100%;
-}
-
-.home-page__eyebrow {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.2;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--dbru-color-text) 62%, transparent);
-}
-
-.home-page__panel-title,
-.home-page__stage-title {
-  margin: 0;
-  font-size: 1.15rem;
-  line-height: 1.2;
-}
-
-.home-page__stage-title {
-  font-size: 1.45rem;
-}
-
-@media (max-width: 960px) {
-  .home-page__body {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .home-page__header {
-    grid-template-columns: 1fr;
-    padding-inline: var(--dbru-space-3);
-  }
-
-  .home-page__actions {
-    justify-content: flex-end;
-  }
-
-  .home-page__panel,
-  .home-page__stage {
-    padding: var(--dbru-space-4);
-  }
+  overflow: hidden;
 }
 </style>

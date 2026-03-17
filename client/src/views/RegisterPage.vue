@@ -135,7 +135,7 @@ async function goToLogin(): Promise<void> {
 }
 
 .register-page__divider-line {
-  height: 1px;
+  height: var(--dbru-border-size-1);
   background: var(--dbru-color-border);
 }
 

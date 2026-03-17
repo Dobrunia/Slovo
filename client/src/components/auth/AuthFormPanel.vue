@@ -33,9 +33,6 @@ defineProps<AuthFormPanelProps>();
 .auth-panel__title {
   margin: 0;
   text-align: center;
-  font-size: clamp(2rem, 4vw, 3rem);
-  line-height: 1.05;
-  font-weight: 700;
 }
 
 @media (max-width: 640px) {

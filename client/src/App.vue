@@ -49,7 +49,6 @@ const guestShellClassName = computed(() =>
   display: grid;
   place-items: center;
   padding: var(--dbru-space-6);
-  box-sizing: border-box;
 }
 
 .guest-shell--login {

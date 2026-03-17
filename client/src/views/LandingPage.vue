@@ -68,8 +68,8 @@
       </svg>
 
       <div class="landing-page__content dbru-surface">
-        <p class="landing-page__kicker dbru-text-sm">Slovo</p>
-        <h1 class="landing-page__title dbru-text-main">Включайся в разговор</h1>
+        <p class="landing-page__kicker dbru-text-xs">Slovo</p>
+        <h1 class="landing-page__title dbru-text-lg dbru-text-main">Включайся в разговор</h1>
 
         <DbrButton
           class="landing-page__action"
@@ -193,8 +193,6 @@ async function goToLogin(): Promise<void> {
   margin: 0;
   max-width: 100%;
   white-space: nowrap;
-  font-size: clamp(0.9rem, 2.82vw, 3rem);
-  line-height: 1;
   letter-spacing: -0.03em;
   font-weight: 700;
   text-wrap: nowrap;
@@ -344,11 +342,6 @@ async function goToLogin(): Promise<void> {
   .landing-page__content {
     padding: var(--dbru-space-4);
   }
-
-  .landing-page__title {
-    font-size: clamp(0.84rem, 3.55vw, 1.16rem);
-  }
-
   .landing-page__action {
     min-width: 11rem;
   }

@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useRouter } from "vue-router";
 import { DbrAvatar, DbrButton, DbrCard } from "dobruniaui-vue";
 import xIcon from "../../assets/icons/x.svg";
+import AppHeadingBlock from "../../components/base/AppHeadingBlock.vue";
 import AppIconButton from "../../components/base/AppIconButton.vue";
 import { useAuthStore } from "../../stores/auth";
 import { useServersStore } from "../../stores/servers";
@@ -44,10 +45,11 @@ async function handleLogout(): Promise<void> {
           <DbrCard class="settings-modal__card">
             <div class="settings-modal__surface">
               <header class="settings-modal__header">
-                <div class="settings-modal__heading">
-                  <p class="settings-modal__eyebrow">Настройки</p>
-                  <h2 class="settings-modal__title">Профиль</h2>
-                </div>
+                <AppHeadingBlock
+                  class="settings-modal__heading"
+                  eyebrow="Настройки"
+                  title="Профиль"
+                />
 
                 <AppIconButton
                   :icon-src="xIcon"
@@ -65,14 +67,20 @@ async function handleLogout(): Promise<void> {
                 />
 
                 <div class="settings-modal__info">
-                  <h3 class="settings-modal__name">{{ profileName }}</h3>
-                  <p class="settings-modal__meta">{{ profileHandle }}</p>
-                  <p class="settings-modal__meta">{{ profileEmail }}</p>
+                  <h3 class="settings-modal__name dbru-text-base dbru-text-main">
+                    {{ profileName }}
+                  </h3>
+                  <p class="settings-modal__meta dbru-text-sm dbru-text-muted">
+                    {{ profileHandle }}
+                  </p>
+                  <p class="settings-modal__meta dbru-text-sm dbru-text-muted">
+                    {{ profileEmail }}
+                  </p>
                 </div>
               </section>
 
               <section class="settings-modal__body">
-                <p class="settings-modal__copy">
+                <p class="settings-modal__copy dbru-text-sm dbru-text-muted">
                   Здесь позже появятся настройки имени, аватара и персональных параметров.
                 </p>
               </section>
@@ -106,9 +114,9 @@ async function handleLogout(): Promise<void> {
 
 .settings-modal__card {
   width: 100%;
-  border: 1px solid var(--dbru-color-border);
+  border: var(--dbru-border-size-1) solid var(--dbru-color-border);
   border-radius: var(--dbru-radius-md);
-  background: color-mix(in srgb, var(--dbru-color-bg) 96%, white);
+  background: var(--dbru-color-surface);
   box-shadow: var(--dbru-shadow-md);
 }
 
@@ -127,24 +135,7 @@ async function handleLogout(): Promise<void> {
 }
 
 .settings-modal__heading {
-  display: grid;
-  gap: var(--dbru-space-2);
-}
-
-.settings-modal__eyebrow {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.2;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--dbru-color-text) 64%, transparent);
-}
-
-.settings-modal__title {
-  margin: 0;
-  font-size: 1.55rem;
-  line-height: 1.1;
-  color: var(--dbru-color-text);
+  flex: 1 1 auto;
 }
 
 .settings-modal__profile {
@@ -160,14 +151,10 @@ async function handleLogout(): Promise<void> {
 
 .settings-modal__name {
   margin: 0;
-  font-size: 1.15rem;
-  line-height: 1.2;
-  color: var(--dbru-color-text);
 }
 
 .settings-modal__meta {
   margin: 0;
-  color: color-mix(in srgb, var(--dbru-color-text) 68%, transparent);
 }
 
 .settings-modal__body {
@@ -177,7 +164,6 @@ async function handleLogout(): Promise<void> {
 
 .settings-modal__copy {
   margin: 0;
-  color: color-mix(in srgb, var(--dbru-color-text) 74%, transparent);
 }
 
 .settings-modal__footer {

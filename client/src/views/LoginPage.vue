@@ -112,7 +112,7 @@ async function goToRegister(): Promise<void> {
 }
 
 .login-page__divider-line {
-  height: 1px;
+  height: var(--dbru-border-size-1);
   background: var(--dbru-color-border);
 }
 

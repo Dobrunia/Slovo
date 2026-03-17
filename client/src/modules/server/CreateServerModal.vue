@@ -3,6 +3,7 @@ import { computed, reactive, watch } from "vue";
 import { DbrButton, DbrCard, DbrInput } from "dobruniaui-vue";
 import xIcon from "../../assets/icons/x.svg";
 import AppIconButton from "../../components/base/AppIconButton.vue";
+import AppHeadingBlock from "../../components/base/AppHeadingBlock.vue";
 import { useServersStore } from "../../stores/servers";
 
 const props = defineProps<{
@@ -11,6 +12,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: [];
+  created: [serverId: string];
 }>();
 
 const serversStore = useServersStore();
@@ -41,11 +43,12 @@ watch(
  * Отправляет запрос на создание нового сервера и закрывает модальное окно после успеха.
  */
 async function handleSubmit(): Promise<void> {
-  await serversStore.createServer({
+  const createdServer = await serversStore.createServer({
     name: form.name,
   });
 
   form.name = "";
+  emit("created", createdServer.id);
   emit("close");
 }
 </script>
@@ -58,10 +61,11 @@ async function handleSubmit(): Promise<void> {
           <DbrCard class="create-server-modal__card">
             <div class="create-server-modal__surface">
               <header class="create-server-modal__header">
-                <div class="create-server-modal__heading">
-                  <p class="create-server-modal__eyebrow">Новый сервер</p>
-                  <h2 class="create-server-modal__title">Создать сервер</h2>
-                </div>
+                <AppHeadingBlock
+                  class="create-server-modal__heading"
+                  eyebrow="Новый сервер"
+                  title="Создать сервер"
+                />
 
                 <AppIconButton
                   :icon-src="xIcon"
@@ -125,9 +129,9 @@ async function handleSubmit(): Promise<void> {
 
 .create-server-modal__card {
   width: 100%;
-  border: 1px solid var(--dbru-color-border);
+  border: var(--dbru-border-size-1) solid var(--dbru-color-border);
   border-radius: var(--dbru-radius-md);
-  background: color-mix(in srgb, var(--dbru-color-bg) 96%, white);
+  background: var(--dbru-color-surface);
   box-shadow: var(--dbru-shadow-md);
 }
 
@@ -146,23 +150,7 @@ async function handleSubmit(): Promise<void> {
 }
 
 .create-server-modal__heading {
-  display: grid;
-  gap: var(--dbru-space-2);
-}
-
-.create-server-modal__eyebrow {
-  margin: 0;
-  font-size: 0.75rem;
-  line-height: 1.2;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--dbru-color-text) 64%, transparent);
-}
-
-.create-server-modal__title {
-  margin: 0;
-  font-size: 1.55rem;
-  line-height: 1.1;
+  flex: 1 1 auto;
 }
 
 .create-server-modal__form {

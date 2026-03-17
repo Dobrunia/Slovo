@@ -27,3 +27,20 @@ export interface ClientCreateServerInput {
 export interface ClientCreateServerResult {
   server: ClientServerListItem;
 }
+
+/**
+ * Краткая клиентская форма голосового канала сервера.
+ */
+export interface ClientVoiceChannel {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
+
+/**
+ * Initial snapshot выбранного сервера для client-side модуля сервера.
+ */
+export interface ClientServerSnapshot {
+  server: ClientServerListItem;
+  channels: ClientVoiceChannel[];
+}
