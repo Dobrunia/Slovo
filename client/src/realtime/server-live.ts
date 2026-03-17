@@ -3,39 +3,130 @@ import type {
   ClientPresenceUpdatedEventPayload,
   ClientServerUpdatedEventPayload,
 } from "../types/server";
-import {
-  subscribeToServerPresence,
-  subscribeToServerStructure,
-} from "./runtime";
+import { subscribeToServerPresence, subscribeToServerStructure } from "./runtime";
 
-type ServerLiveStateSubscriptionInput = {
-  sessionToken: string;
-  serverId: string;
-  onServerUpdated: (payload: ClientServerUpdatedEventPayload) => void;
-  onChannelsUpdated: (payload: ClientChannelsUpdatedEventPayload) => void;
-  onPresenceUpdated: (payload: ClientPresenceUpdatedEventPayload) => void;
-};
+type StopSubscription = () => Promise<void>;
 
 /**
- * Поднимает весь live-контур выбранного сервера: структуру и runtime presence.
+ * Входные параметры единой live-подписки на состояние выбранного сервера.
+ */
+export interface SubscribeToServerLiveStateInput {
+  sessionToken: string;
+  serverId: string;
+  onServerUpdated(payload: ClientServerUpdatedEventPayload): void;
+  onChannelsUpdated(payload: ClientChannelsUpdatedEventPayload): void;
+  onPresenceUpdated(payload: ClientPresenceUpdatedEventPayload): void;
+}
+
+let activeSubscriptionTarget: string | null = null;
+let activeSubscriptionStop: StopSubscription | null = null;
+let pendingSubscriptionTarget: string | null = null;
+let pendingSubscriptionPromise: Promise<StopSubscription> | null = null;
+
+/**
+ * Подписывает клиента на live-структуру и presence выбранного сервера без дублирования
+ * одинаковых подписок на один и тот же session/server target.
  */
 export async function subscribeToServerLiveState(
-  input: ServerLiveStateSubscriptionInput,
-): Promise<() => Promise<void>> {
-  const stopStructure = await subscribeToServerStructure({
-    sessionToken: input.sessionToken,
-    serverId: input.serverId,
-    onServerUpdated: input.onServerUpdated,
-    onChannelsUpdated: input.onChannelsUpdated,
-  });
-  const stopPresence = await subscribeToServerPresence({
-    sessionToken: input.sessionToken,
-    serverId: input.serverId,
-    onPresenceUpdated: input.onPresenceUpdated,
-  });
+  input: SubscribeToServerLiveStateInput,
+): Promise<StopSubscription> {
+  const subscriptionTarget = createSubscriptionTarget(input.sessionToken, input.serverId);
+
+  if (activeSubscriptionTarget === subscriptionTarget && activeSubscriptionStop) {
+    return activeSubscriptionStop;
+  }
+
+  if (
+    pendingSubscriptionTarget === subscriptionTarget &&
+    pendingSubscriptionPromise
+  ) {
+    return pendingSubscriptionPromise;
+  }
+
+  const pendingSubscription = createServerLiveSubscription(input, subscriptionTarget);
+  pendingSubscriptionTarget = subscriptionTarget;
+  pendingSubscriptionPromise = pendingSubscription;
+
+  try {
+    const stop = await pendingSubscription;
+    activeSubscriptionTarget = subscriptionTarget;
+    activeSubscriptionStop = stop;
+    return stop;
+  } finally {
+    if (pendingSubscriptionTarget === subscriptionTarget) {
+      pendingSubscriptionTarget = null;
+      pendingSubscriptionPromise = null;
+    }
+  }
+}
+
+/**
+ * Создает реальную пару подписок на структуру сервера и server presence.
+ */
+async function createServerLiveSubscription(
+  input: SubscribeToServerLiveStateInput,
+  subscriptionTarget: string,
+): Promise<StopSubscription> {
+  let stopStructureSubscription: null | (() => Promise<void> | void) = null;
+  let stopPresenceSubscription: null | (() => Promise<void> | void) = null;
+
+  try {
+    stopStructureSubscription = await subscribeToServerStructure({
+      sessionToken: input.sessionToken,
+      serverId: input.serverId,
+      onServerUpdated: input.onServerUpdated,
+      onChannelsUpdated: input.onChannelsUpdated,
+    });
+    stopPresenceSubscription = await subscribeToServerPresence({
+      sessionToken: input.sessionToken,
+      serverId: input.serverId,
+      onPresenceUpdated: input.onPresenceUpdated,
+    });
+  } catch (error) {
+    await Promise.allSettled([
+      stopSubscription(stopStructureSubscription),
+      stopSubscription(stopPresenceSubscription),
+    ]);
+    throw error;
+  }
+
+  let isStopped = false;
 
   return async () => {
-    await stopPresence();
-    await stopStructure();
+    if (isStopped) {
+      return;
+    }
+
+    isStopped = true;
+
+    if (activeSubscriptionTarget === subscriptionTarget) {
+      activeSubscriptionTarget = null;
+      activeSubscriptionStop = null;
+    }
+
+    await Promise.allSettled([
+      stopSubscription(stopPresenceSubscription),
+      stopSubscription(stopStructureSubscription),
+    ]);
   };
+}
+
+/**
+ * Приводит session/server target к детерминированной строке для dedupe.
+ */
+function createSubscriptionTarget(sessionToken: string, serverId: string): string {
+  return `${sessionToken}:${serverId}`;
+}
+
+/**
+ * Безопасно останавливает подписку, если она была создана.
+ */
+async function stopSubscription(
+  stop: null | (() => Promise<void> | void),
+): Promise<void> {
+  if (!stop) {
+    return;
+  }
+
+  await Promise.resolve(stop());
 }

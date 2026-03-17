@@ -1,53 +1,72 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useAuthStore } from "../../../stores/auth";
-import { useServerModuleStore } from "../../../stores/serverModule";
 import globalBack from "../../../assets/global_back.png";
 import ChannelMemberCard from "./ChannelMemberCard.vue";
+import { useServerModuleStore } from "../../../stores/serverModule";
 
-interface ChannelPresenceViewModuleProps {
+const props = defineProps<{
   selectedChannelId: string | null;
-}
+}>();
 
-const props = defineProps<ChannelPresenceViewModuleProps>();
-const authStore = useAuthStore();
 const serverModuleStore = useServerModuleStore();
 
 /**
- * Возвращает выбранный канал из текущего server snapshot.
+ * Возвращает выбранный канал из текущего snapshot-а сервера.
  */
-const selectedChannel = computed(() =>
-  serverModuleStore.snapshot?.channels.find((channel) => channel.id === props.selectedChannelId) ?? null,
-);
+const selectedChannel = computed(() => {
+  if (!props.selectedChannelId) {
+    return null;
+  }
+
+  return (
+    serverModuleStore.snapshot?.channels.find(
+      (channel) => channel.id === props.selectedChannelId,
+    ) ?? null
+  );
+});
 
 /**
- * Возвращает участников выбранного канала в текущем runtime presence snapshot.
+ * Возвращает участников выбранного канала по runtime presence.
  */
-const selectedChannelMembers = computed(() =>
-  serverModuleStore.presenceMembers.filter((member) => member.channelId === props.selectedChannelId),
+const selectedChannelMembers = computed(() => {
+  if (!props.selectedChannelId) {
+    return [];
+  }
+
+  return serverModuleStore.presenceMembers.filter(
+    (member) => member.channelId === props.selectedChannelId,
+  );
+});
+
+/**
+ * Возвращает название текущего сервера для служебного подзаголовка.
+ */
+const selectedServerName = computed(
+  () => serverModuleStore.snapshot?.server.name ?? "Сервер",
 );
 </script>
 
 <template>
   <section class="channel-presence-view-module">
-    <img
-      class="channel-presence-view-module__background"
-      :src="globalBack"
-      alt=""
-      aria-hidden="true"
-    >
+    <div class="channel-presence-view-module__background">
+      <img
+        class="channel-presence-view-module__background-image"
+        :src="globalBack"
+        alt=""
+      >
+    </div>
 
-    <div class="channel-presence-view-module__overlay">
+    <div class="channel-presence-view-module__overlay"></div>
+
+    <div class="channel-presence-view-module__content">
       <template v-if="selectedChannel">
         <header class="channel-presence-view-module__header">
-          <div class="channel-presence-view-module__title-block">
-            <h2 class="channel-presence-view-module__title dbru-text-xl dbru-text-main">
-              {{ selectedChannel.name }}
-            </h2>
-            <p class="channel-presence-view-module__subtitle dbru-text-sm dbru-text-muted">
-              Участников в канале: {{ selectedChannelMembers.length }}
-            </p>
-          </div>
+          <h2 class="channel-presence-view-module__title dbru-text-lg dbru-text-main">
+            {{ selectedChannel.name }}
+          </h2>
+          <p class="channel-presence-view-module__subtitle dbru-text-sm dbru-text-muted">
+            {{ selectedServerName }}
+          </p>
         </header>
 
         <div
@@ -57,8 +76,8 @@ const selectedChannelMembers = computed(() =>
           <ChannelMemberCard
             v-for="member in selectedChannelMembers"
             :key="member.userId"
-            :member="member"
-            :is-current-user="member.userId === authStore.currentUser?.id"
+            :display-name="member.displayName"
+            :avatar-url="member.avatarUrl"
           />
         </div>
 
@@ -66,11 +85,11 @@ const selectedChannelMembers = computed(() =>
           v-else
           class="channel-presence-view-module__empty"
         >
-          <p class="channel-presence-view-module__empty-title dbru-text-lg dbru-text-main">
-            В канале пока никого нет
-          </p>
-          <p class="channel-presence-view-module__empty-copy dbru-text-sm dbru-text-muted">
-            Участники появятся здесь, как только кто-то подключится к этому каналу.
+          <h2 class="channel-presence-view-module__title dbru-text-lg dbru-text-main">
+            {{ selectedChannel.name }}
+          </h2>
+          <p class="channel-presence-view-module__subtitle dbru-text-sm dbru-text-muted">
+            В этом канале пока никого нет.
           </p>
         </div>
       </template>
@@ -79,10 +98,10 @@ const selectedChannelMembers = computed(() =>
         v-else
         class="channel-presence-view-module__empty"
       >
-        <p class="channel-presence-view-module__empty-title dbru-text-lg dbru-text-main">
+        <h2 class="channel-presence-view-module__title dbru-text-lg dbru-text-main">
           Канал не выбран
-        </p>
-        <p class="channel-presence-view-module__empty-copy dbru-text-sm dbru-text-muted">
+        </h2>
+        <p class="channel-presence-view-module__subtitle dbru-text-sm dbru-text-muted">
           Выберите нужный канал слева.
         </p>
       </div>
@@ -96,47 +115,51 @@ const selectedChannelMembers = computed(() =>
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  background: var(--dbru-color-bg);
+}
+
+.channel-presence-view-module__background,
+.channel-presence-view-module__overlay,
+.channel-presence-view-module__content {
+  position: absolute;
+  inset: 0;
 }
 
 .channel-presence-view-module__background {
-  position: absolute;
-  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.channel-presence-view-module__background-image {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center;
-  pointer-events: none;
+  object-fit: contain;
+  object-position: center center;
 }
 
 .channel-presence-view-module__overlay {
+  background: var(--dbru-color-bg);
+  opacity: 0.84;
+}
+
+.channel-presence-view-module__content {
   position: relative;
-  z-index: 1;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--dbru-space-5);
-  height: 100%;
-  min-height: 0;
   padding: var(--dbru-space-5);
-  background: var(--dbru-color-bg);
-  backdrop-filter: blur(10px);
+  z-index: 1;
 }
 
 .channel-presence-view-module__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--dbru-space-4);
-}
-
-.channel-presence-view-module__title-block {
   display: grid;
   gap: var(--dbru-space-2);
+  align-content: start;
 }
 
 .channel-presence-view-module__title,
-.channel-presence-view-module__subtitle,
-.channel-presence-view-module__empty-title,
-.channel-presence-view-module__empty-copy {
+.channel-presence-view-module__subtitle {
   margin: 0;
 }
 
@@ -151,8 +174,14 @@ const selectedChannelMembers = computed(() =>
 .channel-presence-view-module__empty {
   display: grid;
   align-content: center;
-  justify-items: start;
+  justify-items: center;
   gap: var(--dbru-space-2);
   min-height: 0;
+  text-align: center;
+}
+@media (max-width: 768px) {
+  .channel-presence-view-module__content {
+    padding: var(--dbru-space-4);
+  }
 }
 </style>

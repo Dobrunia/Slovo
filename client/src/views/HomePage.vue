@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ServerDiscoveryModal from "../modules/app/ServerDiscoveryModal.vue";
 import AppHeaderLayout from "../layouts/AppHeaderLayout.vue";
@@ -20,8 +20,7 @@ import {
   readSelectedChannelIdFromRouteParams,
   readSelectedServerIdFromRouteParams,
 } from "../router/serverRoutes";
-import { resetRealtimeRuntime } from "../realtime/runtime";
-import { subscribeToServerLiveState } from "../realtime/server-live";
+import { useHomePageRealtime } from "../composables/useHomePageRealtime";
 import { useAuthStore } from "../stores/auth";
 import { useServersStore } from "../stores/servers";
 import { useServerModuleStore } from "../stores/serverModule";
@@ -35,10 +34,6 @@ const isJoiningInvite = ref(false);
 const authStore = useAuthStore();
 const serversStore = useServersStore();
 const serverModuleStore = useServerModuleStore();
-let stopServerLiveSubscription: (() => Promise<void>) | null = null;
-let serverLiveSubscriptionVersion = 0;
-let requestedServerLiveSubscriptionTarget: string | null = null;
-let activeServerLiveSubscriptionTarget: string | null = null;
 const availableServerIds = computed(() => serversStore.items.map((server) => server.id));
 const selectedServerId = computed(() => readSelectedServerIdFromRouteParams(route.params));
 const selectedChannelId = computed(() => readSelectedChannelIdFromRouteParams(route.params));
@@ -90,35 +85,13 @@ watch(
   },
 );
 
-watch(
-  [selectedServerId, () => authStore.sessionToken],
-  ([nextServerId, nextSessionToken]) => {
-    void switchServerLiveSubscription(nextServerId, nextSessionToken);
-  },
-  {
-    immediate: true,
-  },
-);
-
-watch(
-  [selectedServerId, selectedChannelId, () => serverModuleStore.currentUserPresence],
-  ([currentSelectedServerId, currentSelectedChannelId, currentUserPresence]) => {
-    if (!currentSelectedServerId || !currentSelectedChannelId) {
-      return;
-    }
-
-    if (!currentUserPresence) {
-      void router.replace(buildAppServerRoute(currentSelectedServerId));
-      return;
-    }
-
-    if (currentUserPresence.channelId !== currentSelectedChannelId) {
-      void router.replace(
-        buildAppServerChannelRoute(currentSelectedServerId, currentUserPresence.channelId),
-      );
-    }
-  },
-);
+useHomePageRealtime({
+  selectedServerId,
+  selectedChannelId,
+  authStore,
+  serverModuleStore,
+  router,
+});
 
 /**
  * Переключает видимость модального окна с настройками пользователя.
@@ -172,14 +145,18 @@ async function handleSelectChannel(channelId: string): Promise<void> {
     return;
   }
 
-  if (selectedChannelId.value === channelId) {
-    await serverModuleStore.leaveCurrentChannel();
-    await router.replace(buildAppServerRoute(selectedServerId.value));
-    return;
-  }
+  try {
+    if (serverModuleStore.currentUserPresence?.channelId === channelId) {
+      await serverModuleStore.leaveCurrentChannel();
+      await router.replace(buildAppServerRoute(selectedServerId.value));
+      return;
+    }
 
-  await serverModuleStore.joinOrMoveToChannel(channelId);
-  await router.replace(buildAppServerChannelRoute(selectedServerId.value, channelId));
+    await serverModuleStore.joinOrMoveToChannel(channelId);
+    await router.replace(buildAppServerChannelRoute(selectedServerId.value, channelId));
+  } catch {
+    // Ошибка уже отражена в store и не должна всплывать как unhandled event error.
+  }
 }
 
 /**
@@ -259,79 +236,6 @@ async function syncRouteSelection(
   await serverModuleStore.openServer(nextSelectedServerId);
 }
 
-/**
- * Переключает live-подписки выбранного сервера как единый realtime-контур.
- */
-async function switchServerLiveSubscription(
-  nextServerId: string | null,
-  nextSessionToken: string | null,
-): Promise<void> {
-  const nextSubscriptionTarget =
-    nextServerId && nextSessionToken
-      ? `${nextSessionToken}:${nextServerId}`
-      : null;
-
-  if (nextSubscriptionTarget === requestedServerLiveSubscriptionTarget) {
-    return;
-  }
-
-  requestedServerLiveSubscriptionTarget = nextSubscriptionTarget;
-  serverLiveSubscriptionVersion += 1;
-  const currentVersion = serverLiveSubscriptionVersion;
-
-  if (stopServerLiveSubscription) {
-    await stopServerLiveSubscription();
-    stopServerLiveSubscription = null;
-  }
-
-  activeServerLiveSubscriptionTarget = null;
-  serverModuleStore.presenceMembers = [];
-
-  if (!nextSessionToken || !nextServerId || !nextSubscriptionTarget) {
-    return;
-  }
-
-  try {
-    const stop = await subscribeToServerLiveState({
-      sessionToken: nextSessionToken,
-      serverId: nextServerId,
-      onServerUpdated: (payload) => {
-        serverModuleStore.applyLiveServerUpdated(payload);
-      },
-      onChannelsUpdated: (payload) => {
-        serverModuleStore.applyLiveChannelsUpdated(payload);
-      },
-      onPresenceUpdated: (payload) => {
-        serverModuleStore.applyPresenceUpdated(payload);
-      },
-    });
-
-    if (currentVersion !== serverLiveSubscriptionVersion) {
-      await stop();
-      return;
-    }
-
-    stopServerLiveSubscription = stop;
-    activeServerLiveSubscriptionTarget = nextSubscriptionTarget;
-  } catch (error) {
-    if (currentVersion === serverLiveSubscriptionVersion) {
-      requestedServerLiveSubscriptionTarget = activeServerLiveSubscriptionTarget;
-    }
-
-    throw error;
-  }
-}
-
-onBeforeUnmount(() => {
-  if (stopServerLiveSubscription) {
-    void stopServerLiveSubscription();
-    stopServerLiveSubscription = null;
-  }
-
-  requestedServerLiveSubscriptionTarget = null;
-  activeServerLiveSubscriptionTarget = null;
-  resetRealtimeRuntime();
-});
 </script>
 
 <template>

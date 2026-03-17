@@ -191,6 +191,58 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
     },
   });
 
+  io.on("connection", (socket) => {
+    socket.on("disconnect", async () => {
+      const userId = await resolveRealtimeSocketUserId({
+        dataLayer: input.dataLayer,
+        handshake: socket.handshake,
+      });
+
+      if (!userId) {
+        return;
+      }
+
+      const previousPresence = presenceRegistry.getUserPresence(userId);
+
+      if (!previousPresence) {
+        return;
+      }
+
+      const removedPresence = presenceRegistry.clearPresence(userId);
+
+      if (!removedPresence) {
+        return;
+      }
+
+      const context = createRealtimeServerContext({
+        connectionId: socket.id ?? "unknown-connection",
+        session: {
+          sessionId: null,
+        },
+        user: {
+          userId,
+        },
+        metadata: {
+          connectedAt: new Date().toISOString(),
+          ipAddress: socket.handshake.address ?? null,
+          userAgent: resolveRealtimeUserAgent(socket.handshake.headers),
+        },
+      });
+
+      await runtime.emitEvent(
+        REALTIME_EVENT_NAMES.presenceUpdated as never,
+        {
+          serverId: previousPresence.serverId,
+          member: previousPresence,
+          previousChannelId: previousPresence.channelId,
+          action: "left",
+          occurredAt: new Date().toISOString(),
+        } as never,
+        { context } as never,
+      );
+    });
+  });
+
   return {
     io,
     runtime,

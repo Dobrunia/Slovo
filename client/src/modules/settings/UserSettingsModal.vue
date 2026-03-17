@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { DbrAvatar, DbrButton, DbrInput } from "dobruniaui-vue";
+import { DbrAvatar, DbrButton, DbrToggle, DbrInput } from "dobruniaui-vue";
 import AppModalLayout from "../../components/base/AppModalLayout.vue";
+import { useUserPreferences } from "../../composables/useUserPreferences";
 import { useAuthStore } from "../../stores/auth";
 import { useServersStore } from "../../stores/servers";
 
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 const router = useRouter();
 const authStore = useAuthStore();
 const serversStore = useServersStore();
+const { isSoundEnabled } = useUserPreferences();
 
 const profileName = computed(() => authStore.currentUser?.displayName ?? "Пользователь");
 const profileHandle = computed(() =>
@@ -128,6 +130,11 @@ function normalizeDraftAvatarUrl(value: string): string | null {
         label="Ссылка на аватар"
         name="avatar-url"
         autocomplete="url"
+      />
+
+      <DbrToggle
+        v-model="isSoundEnabled"
+        label="Включить звуки"
       />
 
       <p
