@@ -92,7 +92,7 @@ const hasContent = computed(() => Boolean(slots.default));
 }
 
 .app-icon-button:hover {
-  background-color: color-mix(in srgb, var(--dbru-color-primary) 12%, transparent); /* НЕ МЕНЯТЬ!! */
+  background-color: var(--icon-button-hover);
 }
 
 .app-icon-button:focus-visible {

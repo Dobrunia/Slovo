@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ServerDiscoveryModal from "../modules/app/ServerDiscoveryModal.vue";
 import AppHeaderLayout from "../layouts/AppHeaderLayout.vue";
@@ -7,7 +7,7 @@ import AuthenticatedLayout from "../layouts/AuthenticatedLayout.vue";
 import AppHeaderActionsModule from "../modules/app/AppHeaderActionsModule.vue";
 import ServerRailModule from "../modules/server/ServerRailModule.vue";
 import ServerChannelListModule from "../modules/server/channels/ServerChannelListModule.vue";
-import ChannelViewModule from "../modules/server/channels/ChannelViewModule.vue";
+import ChannelPresenceViewModule from "../modules/server/channels/ChannelPresenceViewModule.vue";
 import UserSettingsModal from "../modules/settings/UserSettingsModal.vue";
 import CreateServerModal from "../modules/server/CreateServerModal.vue";
 import CurrentUserControlModule from "../modules/user/CurrentUserControlModule.vue";
@@ -20,6 +20,9 @@ import {
   readSelectedChannelIdFromRouteParams,
   readSelectedServerIdFromRouteParams,
 } from "../router/serverRoutes";
+import { resetRealtimeRuntime } from "../realtime/runtime";
+import { subscribeToServerLiveState } from "../realtime/server-live";
+import { useAuthStore } from "../stores/auth";
 import { useServersStore } from "../stores/servers";
 import { useServerModuleStore } from "../stores/serverModule";
 
@@ -29,8 +32,11 @@ const isSettingsOpen = ref(false);
 const isCreateServerOpen = ref(false);
 const isDiscoveryOpen = ref(false);
 const isJoiningInvite = ref(false);
+const authStore = useAuthStore();
 const serversStore = useServersStore();
 const serverModuleStore = useServerModuleStore();
+let stopServerLiveSubscription: (() => Promise<void>) | null = null;
+let serverLiveSubscriptionVersion = 0;
 const availableServerIds = computed(() => serversStore.items.map((server) => server.id));
 const selectedServerId = computed(() => readSelectedServerIdFromRouteParams(route.params));
 const selectedChannelId = computed(() => readSelectedChannelIdFromRouteParams(route.params));
@@ -82,6 +88,36 @@ watch(
   },
 );
 
+watch(
+  [selectedServerId, () => authStore.sessionToken],
+  ([nextServerId, nextSessionToken]) => {
+    void switchServerLiveSubscription(nextServerId, nextSessionToken);
+  },
+  {
+    immediate: true,
+  },
+);
+
+watch(
+  [selectedServerId, selectedChannelId, () => serverModuleStore.currentUserPresence],
+  ([currentSelectedServerId, currentSelectedChannelId, currentUserPresence]) => {
+    if (!currentSelectedServerId || !currentSelectedChannelId) {
+      return;
+    }
+
+    if (!currentUserPresence) {
+      void router.replace(buildAppServerRoute(currentSelectedServerId));
+      return;
+    }
+
+    if (currentUserPresence.channelId !== currentSelectedChannelId) {
+      void router.replace(
+        buildAppServerChannelRoute(currentSelectedServerId, currentUserPresence.channelId),
+      );
+    }
+  },
+);
+
 /**
  * Переключает видимость модального окна с настройками пользователя.
  */
@@ -129,12 +165,19 @@ function closeDiscovery(): void {
 /**
  * Открывает выбранный канал в URL внутри текущего сервера.
  */
-function handleSelectChannel(channelId: string): void {
+async function handleSelectChannel(channelId: string): Promise<void> {
   if (!selectedServerId.value) {
     return;
   }
 
-  void router.replace(buildAppServerChannelRoute(selectedServerId.value, channelId));
+  if (selectedChannelId.value === channelId) {
+    await serverModuleStore.leaveCurrentChannel();
+    await router.replace(buildAppServerRoute(selectedServerId.value));
+    return;
+  }
+
+  await serverModuleStore.joinOrMoveToChannel(channelId);
+  await router.replace(buildAppServerChannelRoute(selectedServerId.value, channelId));
 }
 
 /**
@@ -213,6 +256,58 @@ async function syncRouteSelection(
 
   await serverModuleStore.openServer(nextSelectedServerId);
 }
+
+/**
+ * Переключает live-подписки выбранного сервера как единый realtime-контур.
+ */
+async function switchServerLiveSubscription(
+  nextServerId: string | null,
+  nextSessionToken: string | null,
+): Promise<void> {
+  serverLiveSubscriptionVersion += 1;
+  const currentVersion = serverLiveSubscriptionVersion;
+
+  if (stopServerLiveSubscription) {
+    await stopServerLiveSubscription();
+    stopServerLiveSubscription = null;
+  }
+
+  serverModuleStore.presenceMembers = [];
+
+  if (!nextSessionToken || !nextServerId) {
+    return;
+  }
+
+  const stop = await subscribeToServerLiveState({
+    sessionToken: nextSessionToken,
+    serverId: nextServerId,
+    onServerUpdated: (payload) => {
+      serverModuleStore.applyLiveServerUpdated(payload);
+    },
+    onChannelsUpdated: (payload) => {
+      serverModuleStore.applyLiveChannelsUpdated(payload);
+    },
+    onPresenceUpdated: (payload) => {
+      serverModuleStore.applyPresenceUpdated(payload);
+    },
+  });
+
+  if (currentVersion !== serverLiveSubscriptionVersion) {
+    await stop();
+    return;
+  }
+
+  stopServerLiveSubscription = stop;
+}
+
+onBeforeUnmount(() => {
+  if (stopServerLiveSubscription) {
+    void stopServerLiveSubscription();
+    stopServerLiveSubscription = null;
+  }
+
+  resetRealtimeRuntime();
+});
 </script>
 
 <template>
@@ -246,7 +341,7 @@ async function syncRouteSelection(
       </template>
 
       <template #content>
-        <ChannelViewModule :selected-channel-id="selectedChannelId" />
+        <ChannelPresenceViewModule :selected-channel-id="selectedChannelId" />
       </template>
     </AuthenticatedLayout>
 

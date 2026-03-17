@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { DbrAvatar, DbrButton, DbrInput } from "dobruniaui-vue";
-import AppIconButton from "../../components/base/AppIconButton.vue";
-import AppHeadingBlock from "../../components/base/AppHeadingBlock.vue";
-import AppModalLayout from "../../components/base/AppModalLayout.vue";
-import { useServerModuleStore } from "../../stores/serverModule";
-import type { ServerMembershipRole } from "../../types/server";
-import checkIcon from "../../assets/icons/check.svg";
-import copyIcon from "../../assets/icons/copy.svg";
-import refreshIcon from "../../assets/icons/refresh.svg";
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { DbrAvatar, DbrButton, DbrInput } from 'dobruniaui-vue';
+import AppIconButton from '../../components/base/AppIconButton.vue';
+import AppHeadingBlock from '../../components/base/AppHeadingBlock.vue';
+import AppModalLayout from '../../components/base/AppModalLayout.vue';
+import { useServerModuleStore } from '../../stores/serverModule';
+import type { ServerMembershipRole } from '../../types/server';
+import checkIcon from '../../assets/icons/check.svg';
+import copyIcon from '../../assets/icons/copy.svg';
+import refreshIcon from '../../assets/icons/refresh.svg';
 
 const props = defineProps<{
   isOpen: boolean;
@@ -19,27 +19,25 @@ const emit = defineEmits<{
 }>();
 
 const serverModuleStore = useServerModuleStore();
-const draftName = ref("");
-const draftAvatarUrl = ref("");
-const newChannelName = ref("");
+const draftName = ref('');
+const draftAvatarUrl = ref('');
+const newChannelName = ref('');
 const channelNameDrafts = ref<Record<string, string>>({});
 const isCopySucceeded = ref(false);
 const copyResetTimeoutId = ref<number | null>(null);
 
 const currentServer = computed(() => serverModuleStore.snapshot?.server ?? null);
 const currentChannels = computed(() => serverModuleStore.snapshot?.channels ?? []);
-const currentInviteLink = computed(() => serverModuleStore.inviteLink?.inviteLink ?? "");
+const currentInviteLink = computed(() => serverModuleStore.inviteLink?.inviteLink ?? '');
 const previewName = computed(() => {
   const normalizedValue = draftName.value.trim();
-  return normalizedValue.length > 0 ? normalizedValue : currentServer.value?.name ?? "Сервер";
+  return normalizedValue.length > 0 ? normalizedValue : (currentServer.value?.name ?? 'Сервер');
 });
 const previewAvatarUrl = computed(() => {
   const normalizedValue = normalizeOptionalText(draftAvatarUrl.value);
   return normalizedValue ?? currentServer.value?.avatarUrl ?? undefined;
 });
-const canManageServer = computed(() =>
-  isManagerRole(currentServer.value?.role),
-);
+const canManageServer = computed(() => isManagerRole(currentServer.value?.role));
 
 watch(
   () => props.isOpen,
@@ -48,7 +46,7 @@ watch(
       syncDraftWithCurrentServer();
     }
   },
-  { immediate: true },
+  { immediate: true }
 );
 
 watch(currentServer, () => {
@@ -68,7 +66,7 @@ watch(
   },
   {
     deep: true,
-  },
+  }
 );
 
 onBeforeUnmount(() => {
@@ -79,9 +77,9 @@ onBeforeUnmount(() => {
  * Синхронизирует черновики модального окна с текущим выбранным сервером.
  */
 function syncDraftWithCurrentServer(): void {
-  draftName.value = currentServer.value?.name ?? "";
-  draftAvatarUrl.value = currentServer.value?.avatarUrl ?? "";
-  newChannelName.value = "";
+  draftName.value = currentServer.value?.name ?? '';
+  draftAvatarUrl.value = currentServer.value?.avatarUrl ?? '';
+  newChannelName.value = '';
   syncChannelDrafts();
   serverModuleStore.clearChannelsError();
   serverModuleStore.clearServerUpdateError();
@@ -99,7 +97,7 @@ function syncDraftWithCurrentServer(): void {
  */
 function syncChannelDrafts(): void {
   channelNameDrafts.value = Object.fromEntries(
-    currentChannels.value.map((channel) => [channel.id, channel.name]),
+    currentChannels.value.map((channel) => [channel.id, channel.name])
   );
 }
 
@@ -143,7 +141,7 @@ async function handleRegenerateInviteLink(): Promise<void> {
  * Закрывает модальное окно.
  */
 function closeModal(): void {
-  emit("close");
+  emit('close');
 }
 
 /**
@@ -167,7 +165,7 @@ async function handleCreateChannel(): Promise<void> {
 
   try {
     await serverModuleStore.createChannel(newChannelName.value);
-    newChannelName.value = "";
+    newChannelName.value = '';
   } catch {
     // Ошибка уже нормализована в store и показана в модалке.
   }
@@ -182,7 +180,7 @@ async function handleRenameChannel(channelId: string): Promise<void> {
   }
 
   try {
-    await serverModuleStore.updateChannel(channelId, channelNameDrafts.value[channelId] ?? "");
+    await serverModuleStore.updateChannel(channelId, channelNameDrafts.value[channelId] ?? '');
   } catch {
     // Ошибка уже нормализована в store и показана в модалке.
   }
@@ -236,7 +234,7 @@ function normalizeOptionalText(value: string): string | null {
  * Определяет, есть ли у участника права управления сервером.
  */
 function isManagerRole(role: ServerMembershipRole | null | undefined): boolean {
-  return role === "OWNER";
+  return role === 'OWNER';
 }
 
 /**
@@ -271,7 +269,7 @@ async function handleDeleteServer(): Promise<void> {
   }
 
   const isDeletionConfirmed = window.confirm(
-    "Удаление сервера необратимо. Вы уверены, что хотите удалить сервер?",
+    'Удаление сервера необратимо. Вы уверены, что хотите удалить сервер?'
   );
 
   if (!isDeletionConfirmed) {
@@ -313,18 +311,9 @@ function buildReorderedChannelIds(channelId: string, direction: -1 | 1): string[
 </script>
 
 <template>
-  <AppModalLayout
-    :is-open="isOpen"
-    title="Настройки сервера"
-    @close="closeModal"
-  >
+  <AppModalLayout :is-open="isOpen" title="Настройки сервера" @close="closeModal">
     <section class="server-settings-modal__profile">
-      <DbrAvatar
-        size="lg"
-        shape="rounded"
-        :name="previewName"
-        :src="previewAvatarUrl"
-      />
+      <DbrAvatar size="lg" shape="rounded" :name="previewName" :src="previewAvatarUrl" />
 
       <div class="server-settings-modal__profile-text">
         <h3 class="dbru-text-base dbru-text-main server-settings-modal__title">
@@ -384,17 +373,15 @@ function buildReorderedChannelIds(channelId: string, direction: -1 | 1): string[
           />
         </div>
 
-        <div class="server-settings-modal__invite-actions">
-          <AppIconButton
-            v-if="canManageServer"
-            :icon-src="refreshIcon"
-            :spinning="serverModuleStore.isInviteLinkRegenerating"
-            label="Перегенерировать пригласительную ссылку"
-            @click="handleRegenerateInviteLink"
-          >
-            Перегенерировать
-          </AppIconButton>
-        </div>
+        <AppIconButton
+          v-if="canManageServer"
+          :icon-src="refreshIcon"
+          :spinning="serverModuleStore.isInviteLinkRegenerating"
+          label="Перегенерировать пригласительную ссылку"
+          @click="handleRegenerateInviteLink"
+        >
+          Перегенерировать
+        </AppIconButton>
       </div>
     </section>
 
@@ -489,10 +476,7 @@ function buildReorderedChannelIds(channelId: string, direction: -1 | 1): string[
         </article>
       </div>
 
-      <p
-        v-else
-        class="server-settings-modal__channels-empty dbru-text-sm dbru-text-muted"
-      >
+      <p v-else class="server-settings-modal__channels-empty dbru-text-sm dbru-text-muted">
         Каналов пока нет.
       </p>
     </section>
@@ -618,11 +602,6 @@ function buildReorderedChannelIds(channelId: string, direction: -1 | 1): string[
 
 .server-settings-modal__invite-input-wrap {
   min-width: 0;
-}
-
-.server-settings-modal__invite-actions {
-  display: flex;
-  align-items: center;
 }
 
 .server-settings-modal__footer {

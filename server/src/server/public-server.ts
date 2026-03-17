@@ -21,6 +21,17 @@ export const publicVoiceChannelSchema = z.object({
 });
 
 /**
+ * Публичная runtime-форма участника голосового канала.
+ */
+export const publicRuntimePresenceMemberSchema = z.object({
+  userId: z.string().min(1),
+  displayName: z.string().min(1),
+  avatarUrl: z.string().url().nullable(),
+  channelId: z.string().min(1),
+  joinedAt: z.string().min(1),
+});
+
+/**
  * Публичный initial snapshot выбранного сервера.
  */
 export const publicServerSnapshotSchema = z.object({
@@ -33,6 +44,13 @@ export const publicServerSnapshotSchema = z.object({
  */
 export const publicServerChannelsSchema = z.object({
   channels: z.array(publicVoiceChannelSchema),
+});
+
+/**
+ * Публичный snapshot runtime presence внутри сервера.
+ */
+export const publicServerPresenceSnapshotSchema = z.object({
+  members: z.array(publicRuntimePresenceMemberSchema),
 });
 
 /**
@@ -76,6 +94,11 @@ export type PublicServerSnapshot = z.infer<typeof publicServerSnapshotSchema> & 
  * Публичный payload структуры каналов сервера.
  */
 export type PublicServerChannels = z.infer<typeof publicServerChannelsSchema>;
+
+/**
+ * Публичный snapshot runtime presence сервера.
+ */
+export type PublicServerPresenceSnapshot = z.infer<typeof publicServerPresenceSnapshotSchema>;
 
 /**
  * Публичная invite-ссылка сервера.
@@ -132,6 +155,25 @@ export function toPublicVoiceChannel(
     id: channel.id,
     name: channel.name,
     sortOrder: channel.sortOrder,
+  };
+}
+
+/**
+ * Преобразует runtime presence участника в безопасную клиентскую форму.
+ */
+export function toPublicRuntimePresenceMember(input: {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  channelId: string;
+  joinedAt: string;
+}) {
+  return {
+    userId: input.userId,
+    displayName: input.displayName,
+    avatarUrl: input.avatarUrl,
+    channelId: input.channelId,
+    joinedAt: input.joinedAt,
   };
 }
 

@@ -11,6 +11,7 @@ import {
   disposeDataLayer,
 } from "./data/prisma.js";
 import { createGraphqlServer } from "./graphql/server.js";
+import { isSocketIoRequest } from "./realtime/http.js";
 import { createSlovoRealtimeServer } from "./realtime/runtime.js";
 
 /**
@@ -28,16 +29,23 @@ async function startServer() {
   await connectDataLayer(dataLayer);
   process.stdout.write("Connected to MySQL database\n");
 
-  const server = createServer();
+  let yoga: ReturnType<typeof createGraphqlServer>;
+  const server = createServer((request, response) => {
+    if (isSocketIoRequest(request.url)) {
+      return;
+    }
+
+    void yoga(request, response);
+  });
   const realtime = createSlovoRealtimeServer({
     httpServer: server,
+    dataLayer,
   });
-  const yoga = createGraphqlServer({
+  yoga = createGraphqlServer({
     dataLayer,
     realtimeRuntime: realtime.runtime,
+    presenceRegistry: realtime.presenceRegistry,
   });
-
-  server.on("request", yoga);
 
   await new Promise<void>((resolve) => {
     server.listen(port, resolve);

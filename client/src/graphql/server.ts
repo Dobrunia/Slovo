@@ -10,6 +10,7 @@ import type {
   ClientReorderVoiceChannelsInput,
   ClientServerInviteLink,
   ClientServerChannelsPayload,
+  ClientServerPresenceSnapshot,
   ClientServerSnapshot,
   ClientUpdateServerInput,
   ClientUpdateServerResult,
@@ -63,6 +64,10 @@ export interface CreateServerApiClientOptions {
  */
 export interface ServerApiClient {
   serverSnapshot(sessionToken: string, serverId: string): Promise<ClientServerSnapshot>;
+  serverPresenceSnapshot(
+    sessionToken: string,
+    serverId: string,
+  ): Promise<ClientServerPresenceSnapshot>;
   createVoiceChannel(
     sessionToken: string,
     input: ClientCreateVoiceChannelInput,
@@ -140,6 +145,14 @@ export function createServerApiClient(
       );
 
       return data.serverSnapshot;
+    },
+    async serverPresenceSnapshot(sessionToken, serverId) {
+      const data = await request<{ serverPresenceSnapshot: ClientServerPresenceSnapshot }>(
+        buildServerPresenceSnapshotQuery(serverId),
+        sessionToken,
+      );
+
+      return data.serverPresenceSnapshot;
     },
     async createVoiceChannel(sessionToken, input) {
       const data = await request<{ createVoiceChannel: ClientServerChannelsPayload }>(
@@ -220,6 +233,29 @@ function buildServerSnapshotQuery(serverId: string): string {
         }
       ) {
         ${SERVER_SNAPSHOT_FIELDS}
+      }
+    }
+  `;
+}
+
+/**
+ * Строит GraphQL-query initial snapshot-а runtime presence выбранного сервера.
+ */
+function buildServerPresenceSnapshotQuery(serverId: string): string {
+  return `
+    query {
+      serverPresenceSnapshot(
+        input: {
+          serverId: ${toGraphqlString(serverId)}
+        }
+      ) {
+        members {
+          userId
+          displayName
+          avatarUrl
+          channelId
+          joinedAt
+        }
       }
     }
   `;

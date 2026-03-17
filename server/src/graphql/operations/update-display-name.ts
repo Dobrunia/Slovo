@@ -3,6 +3,7 @@ import { mutation } from 'strictql';
 import { authenticatedPolicy } from '../../auth/policies.js';
 import { requireCurrentUser } from '../../auth/require.js';
 import { DISPLAY_NAME_MAX_LENGTH, DISPLAY_NAME_MIN_LENGTH } from '../../config/constants.js';
+import { emitSystemRealtimeEvent } from '../../realtime/runtime.js';
 import { publicUserSchema, toPublicUser } from '../../auth/user.js';
 import { REALTIME_EVENT_NAMES } from '../../../../shared/realtime/names.js';
 import type { GraphqlContext } from '../context.js';
@@ -44,7 +45,7 @@ export const updateDisplayNameMutation = mutation({
     });
 
     if (graphqlContext.realtimeRuntime) {
-      await graphqlContext.realtimeRuntime.emitEvent(REALTIME_EVENT_NAMES.profileUpdated, {
+      await emitSystemRealtimeEvent(graphqlContext.realtimeRuntime, REALTIME_EVENT_NAMES.profileUpdated, {
         userId: updatedUser.id,
         displayName: updatedUser.displayName,
         avatarUrl: updatedUser.avatarUrl,

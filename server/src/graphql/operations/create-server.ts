@@ -8,6 +8,7 @@ import {
   SERVER_NAME_MAX_LENGTH,
   SERVER_NAME_MIN_LENGTH,
 } from '../../config/constants.js';
+import { emitSystemRealtimeEvent } from '../../realtime/runtime.js';
 import { generateServerInviteToken } from '../../server/invite-link.js';
 import { publicServerListItemSchema, toPublicServerListItem } from '../../server/public-server.js';
 import { REALTIME_EVENT_NAMES } from '../../../../shared/realtime/names.js';
@@ -72,7 +73,7 @@ export const createServerMutation = mutation({
     });
 
     if (graphqlContext.realtimeRuntime) {
-      await graphqlContext.realtimeRuntime.emitEvent(REALTIME_EVENT_NAMES.userServersUpdated, {
+      await emitSystemRealtimeEvent(graphqlContext.realtimeRuntime, REALTIME_EVENT_NAMES.userServersUpdated, {
         userId,
         serverId: server.id,
         action: 'created',

@@ -139,3 +139,52 @@ export interface ClientServerInviteLink {
 export interface ClientDeleteServerResult {
   serverId: string;
 }
+
+/**
+ * Live-payload обновления метаданных сервера.
+ */
+export interface ClientServerUpdatedEventPayload {
+  serverId: string;
+  name: string;
+  avatarUrl: string | null;
+  isPublic: boolean;
+  updatedAt: string;
+}
+
+/**
+ * Live-payload обновления структуры каналов сервера.
+ */
+export interface ClientChannelsUpdatedEventPayload {
+  serverId: string;
+  channels: ClientVoiceChannel[];
+  updatedAt: string;
+}
+
+/**
+ * Runtime-форма участника голосового канала на клиенте.
+ */
+export interface ClientRuntimePresenceMember {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  channelId: string;
+  joinedAt: string;
+}
+
+/**
+ * Live-payload изменения presence внутри сервера.
+ */
+export interface ClientPresenceUpdatedEventPayload {
+  serverId: string;
+  member: ClientRuntimePresenceMember;
+  previousChannelId: string | null;
+  action: "joined" | "left" | "moved";
+  occurredAt: string;
+}
+
+/**
+ * Initial snapshot runtime presence выбранного сервера.
+ */
+export interface ClientServerPresenceSnapshot {
+  members: ClientRuntimePresenceMember[];
+}

@@ -1,21 +1,29 @@
 import type { Server as HttpServer } from "node:http";
 import { createContractRegistry } from "dobrunia-liverail-contracts";
 import {
-  type ServerEventDeliverer,
-  type ServerEventRoute,
-  type ServerEventRouter,
   createServerRuntime,
   createServerRuntimeContext,
 } from "dobrunia-liverail-server";
-import {
-  createSocketIoChannelRoute,
-  createSocketIoEventDeliverer,
-  createSocketIoServerAdapter,
-} from "dobrunia-liverail-server/socket-io";
+import { createSocketIoServerAdapter } from "dobrunia-liverail-server/socket-io";
 import { Server as SocketIOServer } from "socket.io";
 import { DEFAULT_CLIENT_ORIGIN } from "../config/constants.js";
+import type { DataLayer } from "../data/prisma.js";
+import { createRuntimePresenceRegistry, type RuntimePresenceRegistry } from "./presence.js";
+import { createRealtimeChannelJoinAuthorizers } from "./channel-access.js";
+import { createRealtimeEventDeliverers, createRealtimeEventRouters } from "./events.js";
+import { createRealtimeCorsOriginMatcher } from "./http.js";
 import {
-  REALTIME_CHANNEL_NAMES,
+  requireRealtimeUserId,
+  resolveRealtimeSocketUserId,
+  resolveRealtimeUserAgent,
+} from "./socket-context.js";
+import {
+  joinVoiceChannelCommand,
+  leaveVoiceChannelCommand,
+  moveVoiceChannelCommand,
+} from "./voice-commands.js";
+import {
+  REALTIME_COMMAND_NAMES,
   REALTIME_EVENT_NAMES,
 } from "../../../shared/realtime/names.js";
 
@@ -44,8 +52,10 @@ export type RealtimeServerContext<
 
 type CreateRealtimeServerFoundationInput<TRegistry extends RealtimeRegistry> = {
   httpServer: HttpServer;
+  dataLayer: DataLayer;
   registry: TRegistry;
   clientOrigin?: string;
+  presenceRegistry?: RuntimePresenceRegistry;
 };
 
 /**
@@ -54,96 +64,138 @@ type CreateRealtimeServerFoundationInput<TRegistry extends RealtimeRegistry> = {
 export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistry>(
   input: CreateRealtimeServerFoundationInput<TRegistry>,
 ) {
+  const presenceRegistry = input.presenceRegistry ?? createRuntimePresenceRegistry();
+  const resolvedClientOrigin =
+    input.clientOrigin ??
+    (process.env.CLIENT_ORIGIN?.trim() || DEFAULT_CLIENT_ORIGIN);
   const io = new SocketIOServer(input.httpServer, {
     cors: {
-      origin:
-        input.clientOrigin ??
-        (process.env.CLIENT_ORIGIN?.trim() || DEFAULT_CLIENT_ORIGIN),
+      origin: createRealtimeCorsOriginMatcher(resolvedClientOrigin),
       credentials: true,
     },
   });
-  const sharedEventDeliverer = createSocketIoEventDeliverer(io);
-  const eventRouters: Record<string, ServerEventRouter> = {
-    [REALTIME_EVENT_NAMES.profileUpdated]: ({ payload }) =>
-      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.userProfile, {
-        userId: (payload as { userId: string }).userId,
-      }),
-    [REALTIME_EVENT_NAMES.userServersUpdated]: ({ payload }) =>
-      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.userProfile, {
-        userId: (payload as { userId: string }).userId,
-      }),
-    [REALTIME_EVENT_NAMES.serverUpdated]: ({ payload }) =>
-      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.serverStructure, {
-        serverId: (payload as { serverId: string }).serverId,
-      }),
-    [REALTIME_EVENT_NAMES.channelsUpdated]: ({ payload }) =>
-      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.serverStructure, {
-        serverId: (payload as { serverId: string }).serverId,
-      }),
-    [REALTIME_EVENT_NAMES.presenceUpdated]: ({ payload }) =>
-      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.serverPresence, {
-        serverId: (payload as { serverId: string }).serverId,
-      }),
-    [REALTIME_EVENT_NAMES.voiceStateUpdated]: ({ payload }) =>
-      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.voiceSession, {
-        serverId: (payload as { serverId: string; channelId: string }).serverId,
-        channelId: (payload as { serverId: string; channelId: string }).channelId,
-      }),
-    [REALTIME_EVENT_NAMES.screenShareUpdated]: ({ payload }) =>
-      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.voiceSession, {
-        serverId: (payload as { serverId: string; channelId: string }).serverId,
-        channelId: (payload as { serverId: string; channelId: string }).channelId,
-      }),
-    [REALTIME_EVENT_NAMES.forcedDisconnect]: ({ payload }) =>
-      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.userProfile, {
-        userId: (payload as { userId: string }).userId,
-      }),
-  };
-  const eventDeliverers: Record<string, ServerEventDeliverer> = {
-    [REALTIME_EVENT_NAMES.profileUpdated]: sharedEventDeliverer,
-    [REALTIME_EVENT_NAMES.userServersUpdated]: sharedEventDeliverer,
-    [REALTIME_EVENT_NAMES.serverUpdated]: sharedEventDeliverer,
-    [REALTIME_EVENT_NAMES.channelsUpdated]: sharedEventDeliverer,
-    [REALTIME_EVENT_NAMES.presenceUpdated]: sharedEventDeliverer,
-    [REALTIME_EVENT_NAMES.voiceStateUpdated]: sharedEventDeliverer,
-    [REALTIME_EVENT_NAMES.screenShareUpdated]: sharedEventDeliverer,
-    [REALTIME_EVENT_NAMES.forcedDisconnect]: sharedEventDeliverer,
-  };
-  const runtime = createServerRuntime({
+  const eventRouters = createRealtimeEventRouters();
+  const eventDeliverers = createRealtimeEventDeliverers(io);
+  let runtime: ReturnType<typeof createServerRuntime<RealtimeServerContext, TRegistry>>;
+  runtime = createServerRuntime<RealtimeServerContext, TRegistry>({
     registry: input.registry,
+    channelJoinAuthorizers: createRealtimeChannelJoinAuthorizers(input.dataLayer) as never,
+    commandHandlers: {
+      [REALTIME_COMMAND_NAMES.joinVoiceChannel]: async ({
+        input: commandInput,
+        context,
+      }: {
+        input: { serverId: string; channelId: string };
+        context: RealtimeServerContext;
+      }) => {
+        const userId = requireRealtimeUserId(context);
+
+        return joinVoiceChannelCommand({
+          dataLayer: input.dataLayer,
+          presenceRegistry,
+          emitPresenceUpdated: (payload) =>
+            runtime.emitEvent(
+              REALTIME_EVENT_NAMES.presenceUpdated as never,
+              payload as never,
+              { context } as never,
+            ),
+          userId,
+          serverId: commandInput.serverId,
+          channelId: commandInput.channelId,
+        });
+      },
+      [REALTIME_COMMAND_NAMES.leaveVoiceChannel]: async ({
+        input: commandInput,
+        context,
+      }: {
+        input: { serverId: string; channelId: string };
+        context: RealtimeServerContext;
+      }) => {
+        const userId = requireRealtimeUserId(context);
+
+        return leaveVoiceChannelCommand({
+          dataLayer: input.dataLayer,
+          presenceRegistry,
+          emitPresenceUpdated: (payload) =>
+            runtime.emitEvent(
+              REALTIME_EVENT_NAMES.presenceUpdated as never,
+              payload as never,
+              { context } as never,
+            ),
+          userId,
+          serverId: commandInput.serverId,
+          channelId: commandInput.channelId,
+        });
+      },
+      [REALTIME_COMMAND_NAMES.moveVoiceChannel]: async ({
+        input: commandInput,
+        context,
+      }: {
+        input: { serverId: string; channelId: string; targetChannelId: string };
+        context: RealtimeServerContext;
+      }) => {
+        const userId = requireRealtimeUserId(context);
+
+        return moveVoiceChannelCommand({
+          dataLayer: input.dataLayer,
+          presenceRegistry,
+          emitPresenceUpdated: (payload) =>
+            runtime.emitEvent(
+              REALTIME_EVENT_NAMES.presenceUpdated as never,
+              payload as never,
+              { context } as never,
+            ),
+          userId,
+          serverId: commandInput.serverId,
+          channelId: commandInput.channelId,
+          targetChannelId: commandInput.targetChannelId,
+        });
+      },
+    } as never,
     eventRouters: eventRouters as never,
     eventDeliverers: eventDeliverers as never,
   });
   const adapter = createSocketIoServerAdapter({
     io,
     runtime,
-    injectContext: (socket: {
+    injectContext: async (socket: {
       id?: string;
       handshake?: {
         address?: string;
         headers?: Record<string, string | string[] | undefined>;
+        auth?: Record<string, unknown>;
+        query?: Record<string, unknown>;
       };
-    }) =>
+    }) => {
+      const userId = await resolveRealtimeSocketUserId({
+        dataLayer: input.dataLayer,
+        handshake: socket.handshake,
+      });
+
+      return (
       createRealtimeServerContext({
         connectionId: socket.id ?? "unknown-connection",
         session: {
           sessionId: null,
         },
         user: {
-          userId: null,
+          userId,
         },
         metadata: {
           connectedAt: new Date().toISOString(),
           ipAddress: socket.handshake?.address ?? null,
-          userAgent: resolveUserAgent(socket.handshake?.headers),
+          userAgent: resolveRealtimeUserAgent(socket.handshake?.headers),
         },
-      }),
+      })
+      );
+    },
   });
 
   return {
     io,
     runtime,
     adapter,
+    presenceRegistry,
   };
 }
 
@@ -172,19 +224,4 @@ export function createRealtimeServerContext<TSession, TUser, TMetadata>(
     user: input.user,
     metadata: input.metadata,
   });
-}
-
-/**
- * Извлекает user-agent из заголовков сокета и нормализует его к строке или `null`.
- */
-function resolveUserAgent(
-  headers: Record<string, string | string[] | undefined> | undefined,
-): string | null {
-  const userAgent = headers?.["user-agent"];
-
-  if (typeof userAgent === "string" && userAgent.trim()) {
-    return userAgent;
-  }
-
-  return null;
 }

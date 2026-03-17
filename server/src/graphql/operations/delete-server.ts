@@ -2,6 +2,7 @@ import { z } from "zod";
 import { mutation } from "strictql";
 import { authenticatedPolicy } from "../../auth/policies.js";
 import { requireCurrentUser } from "../../auth/require.js";
+import { emitSystemRealtimeEvent } from "../../realtime/runtime.js";
 import { requireServerOwner } from "../../server/access.js";
 import { REALTIME_EVENT_NAMES } from "../../../../shared/realtime/names.js";
 import type { GraphqlContext } from "../context.js";
@@ -15,7 +16,7 @@ const deleteServerOutputSchema = z.object({
 });
 
 /**
- * Приватная GraphQL-мутация удаления сервера только его владельцем.
+ * Приватная GraphQL-мутация удаления сервера владельцем.
  */
 export const deleteServerMutation = mutation({
   name: "deleteServer",
@@ -32,39 +33,39 @@ export const deleteServerMutation = mutation({
     const graphqlContext = ctx as GraphqlContext;
     const userId = requireCurrentUser(graphqlContext);
 
-    await requireServerOwner({
+    const ownerMembership = await requireServerOwner({
       dataLayer: graphqlContext.dataLayer,
       serverId: input.serverId,
       userId,
     });
-
     const affectedMemberships = await graphqlContext.dataLayer.prisma.serverMember.findMany({
       where: {
-        serverId: input.serverId,
+        serverId: ownerMembership.server.id,
       },
     });
-
     const deletedServer = await graphqlContext.dataLayer.prisma.server.delete({
       where: {
-        id: input.serverId,
+        id: ownerMembership.server.id,
       },
     });
 
     if (graphqlContext.realtimeRuntime) {
-      await Promise.all(
-        affectedMemberships.map((membership) =>
-          graphqlContext.realtimeRuntime!.emitEvent(REALTIME_EVENT_NAMES.userServersUpdated, {
+      for (const membership of affectedMemberships) {
+        await emitSystemRealtimeEvent(
+          graphqlContext.realtimeRuntime,
+          REALTIME_EVENT_NAMES.userServersUpdated,
+          {
             userId: membership.userId,
-            serverId: input.serverId,
+            serverId: deletedServer.id,
             action: "deleted",
             occurredAt: deletedServer.updatedAt.toISOString(),
-          }),
-        ),
-      );
+          },
+        );
+      }
     }
 
     return {
-      serverId: input.serverId,
+      serverId: deletedServer.id,
     };
   },
 });

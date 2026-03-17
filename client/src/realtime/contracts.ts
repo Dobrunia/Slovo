@@ -40,6 +40,14 @@ const channelSnapshotSchema = z.object({
   sortOrder: z.number().int().min(0),
 });
 
+const presenceMemberSchema = z.object({
+  userId: z.string().min(1),
+  displayName: z.string().min(1),
+  avatarUrl: z.string().url().nullable(),
+  channelId: z.string().min(1),
+  joinedAt: z.string().min(1),
+});
+
 /**
  * Типизированные realtime-каналы проекта.
  */
@@ -100,8 +108,7 @@ export const realtimeEvents = [
   event(REALTIME_EVENT_NAMES.presenceUpdated, {
     payload: z.object({
       serverId: z.string().min(1),
-      userId: z.string().min(1),
-      channelId: z.string().min(1),
+      member: presenceMemberSchema,
       previousChannelId: z.string().min(1).nullable(),
       action: z.enum(["joined", "left", "moved"]),
       occurredAt: z.string().min(1),

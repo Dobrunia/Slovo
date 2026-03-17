@@ -7,6 +7,7 @@ import {
   SERVER_NAME_MAX_LENGTH,
   SERVER_NAME_MIN_LENGTH,
 } from "../../config/constants.js";
+import { emitSystemRealtimeEvent } from "../../realtime/runtime.js";
 import { requireServerOwner } from "../../server/access.js";
 import {
   publicServerListItemSchema,
@@ -26,7 +27,7 @@ const updateServerOutputSchema = z.object({
 });
 
 /**
- * Приватная GraphQL-мутация изменения названия и аватара сервера.
+ * Приватная GraphQL-мутация изменения названия и аватара сервера владельцем.
  */
 export const updateServerMutation = mutation({
   name: "updateServer",
@@ -43,30 +44,33 @@ export const updateServerMutation = mutation({
     const graphqlContext = ctx as GraphqlContext;
     const userId = requireCurrentUser(graphqlContext);
 
-    const manageableMembership = await requireServerOwner({
+    const ownerMembership = await requireServerOwner({
       dataLayer: graphqlContext.dataLayer,
       serverId: input.serverId,
       userId,
     });
-
     const updatedServer = await graphqlContext.dataLayer.prisma.server.update({
       where: {
-        id: input.serverId,
+        id: ownerMembership.server.id,
       },
       data: {
         name: input.name.trim(),
-        avatarUrl: normalizeServerAvatarUrl(input.avatarUrl),
+        avatarUrl: normalizeAvatarUrl(input.avatarUrl),
       },
     });
 
     if (graphqlContext.realtimeRuntime) {
-      await graphqlContext.realtimeRuntime.emitEvent(REALTIME_EVENT_NAMES.serverUpdated, {
-        serverId: updatedServer.id,
-        name: updatedServer.name,
-        avatarUrl: updatedServer.avatarUrl,
-        isPublic: updatedServer.isPublic,
-        updatedAt: updatedServer.updatedAt.toISOString(),
-      });
+      await emitSystemRealtimeEvent(
+        graphqlContext.realtimeRuntime,
+        REALTIME_EVENT_NAMES.serverUpdated,
+        {
+          serverId: updatedServer.id,
+          name: updatedServer.name,
+          avatarUrl: updatedServer.avatarUrl,
+          isPublic: updatedServer.isPublic,
+          updatedAt: updatedServer.updatedAt.toISOString(),
+        },
+      );
     }
 
     return {
@@ -75,17 +79,16 @@ export const updateServerMutation = mutation({
         name: updatedServer.name,
         avatarUrl: updatedServer.avatarUrl,
         isPublic: updatedServer.isPublic,
-        role: manageableMembership.role,
+        role: ownerMembership.role,
       }),
     };
   },
 });
 
 /**
- * Нормализует avatar URL сервера: пустое значение очищает аватар,
- * непустое — должно оставаться валидным URL.
+ * Нормализует avatar URL сервера: пустое значение очищает аватар.
  */
-function normalizeServerAvatarUrl(avatarUrl: string | null): string | null {
+function normalizeAvatarUrl(avatarUrl: string | null): string | null {
   if (avatarUrl === null) {
     return null;
   }

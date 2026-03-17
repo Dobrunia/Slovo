@@ -406,7 +406,7 @@ onBeforeUnmount(() => {
 }
 
 .server-rail__nav:hover {
-  background: var(--dbru-color-bg);
+  background-color: var(--icon-button-hover);
 }
 
 .server-rail__nav:focus-visible {

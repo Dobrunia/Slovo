@@ -1,19 +1,24 @@
 import { REALTIME_EVENT_NAMES } from "../../../shared/realtime/names.js";
 import type { DataLayer } from "../data/prisma.js";
-import type { SlovoRealtimeRuntime } from "../realtime/runtime.js";
-import type { PublicVoiceChannel } from "./public-server.js";
-import { toPublicVoiceChannel } from "./public-server.js";
+import {
+  emitSystemRealtimeEvent,
+  type SlovoRealtimeRuntime,
+} from "../realtime/runtime.js";
+import {
+  toPublicVoiceChannel,
+  type PublicVoiceChannel,
+} from "./public-server.js";
 
 /**
- * Загружает отсортированный публичный snapshot voice-каналов выбранного сервера.
+ * Загружает voice-каналы сервера в клиентской публичной форме и серверном порядке.
  */
-export async function loadServerChannels(args: {
+export async function loadServerChannels(input: {
   dataLayer: DataLayer;
   serverId: string;
 }): Promise<PublicVoiceChannel[]> {
-  const channels = await args.dataLayer.prisma.voiceChannel.findMany({
+  const channels = await input.dataLayer.prisma.voiceChannel.findMany({
     where: {
-      serverId: args.serverId,
+      serverId: input.serverId,
     },
     orderBy: {
       sortOrder: "asc",
@@ -30,50 +35,51 @@ export async function loadServerChannels(args: {
 }
 
 /**
- * Рассылает live-событие обновленной структуры каналов сервера.
+ * Уплотняет порядок каналов сервера после удаления или иных перестановок.
  */
-export async function emitServerChannelsUpdated(args: {
-  realtimeRuntime?: SlovoRealtimeRuntime | null;
-  serverId: string;
-  channels: PublicVoiceChannel[];
-}): Promise<void> {
-  if (!args.realtimeRuntime) {
-    return;
-  }
-
-  await args.realtimeRuntime.emitEvent(REALTIME_EVENT_NAMES.channelsUpdated, {
-    serverId: args.serverId,
-    channels: args.channels,
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-/**
- * Переуплотняет sortOrder оставшихся каналов после delete/reorder сценариев.
- */
-export async function compactServerChannelOrder(args: {
+export async function compactServerChannelOrder(input: {
   dataLayer: DataLayer;
   serverId: string;
 }): Promise<void> {
-  const channels = await args.dataLayer.prisma.voiceChannel.findMany({
+  const channels = await input.dataLayer.prisma.voiceChannel.findMany({
     where: {
-      serverId: args.serverId,
+      serverId: input.serverId,
     },
     orderBy: {
       sortOrder: "asc",
     },
   });
 
-  await Promise.all(
-    channels.map((channel, index) =>
-      args.dataLayer.prisma.voiceChannel.update({
+  for (const [index, channel] of channels.entries()) {
+    if (channel.sortOrder !== index) {
+      await input.dataLayer.prisma.voiceChannel.update({
         where: {
           id: channel.id,
         },
         data: {
           sortOrder: index,
         },
-      }),
-    ),
-  );
+      });
+    }
+  }
+}
+
+/**
+ * Рассылает live-обновление структуры каналов сервера всем его подписчикам.
+ */
+export async function emitServerChannelsUpdated(input: {
+  realtimeRuntime: SlovoRealtimeRuntime | null;
+  serverId: string;
+  channels: PublicVoiceChannel[];
+  updatedAt?: string;
+}): Promise<void> {
+  if (!input.realtimeRuntime) {
+    return;
+  }
+
+  await emitSystemRealtimeEvent(input.realtimeRuntime, REALTIME_EVENT_NAMES.channelsUpdated, {
+    serverId: input.serverId,
+    channels: input.channels,
+    updatedAt: input.updatedAt ?? new Date().toISOString(),
+  });
 }

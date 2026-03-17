@@ -1,5 +1,6 @@
 import { resolveSessionUserId } from '../auth/session.js';
 import type { DataLayer } from '../data/prisma.js';
+import type { RuntimePresenceRegistry } from '../realtime/presence.js';
 import type { SlovoRealtimeRuntime } from '../realtime/runtime.js';
 
 /**
@@ -9,11 +10,13 @@ export type GraphqlContext = {
   dataLayer: DataLayer;
   userId: string | null;
   realtimeRuntime: SlovoRealtimeRuntime | null;
+  presenceRegistry: RuntimePresenceRegistry | null;
 };
 
 type ContextInput = {
   dataLayer: DataLayer;
   realtimeRuntime?: SlovoRealtimeRuntime | null;
+  presenceRegistry?: RuntimePresenceRegistry | null;
   request: Request;
 };
 
@@ -28,5 +31,6 @@ export async function createGraphqlContext(input: ContextInput): Promise<Graphql
       headers: input.request.headers,
     }),
     realtimeRuntime: input.realtimeRuntime ?? null,
+    presenceRegistry: input.presenceRegistry ?? null,
   };
 }

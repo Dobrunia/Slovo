@@ -1,14 +1,23 @@
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { defineStore } from "pinia";
 import { DEFAULT_CLIENT_GRAPHQL_URL } from "../constants";
 import { createServerApiClient } from "../graphql/server";
+import {
+  executeJoinVoiceChannelCommand,
+  executeLeaveVoiceChannelCommand,
+  executeMoveVoiceChannelCommand,
+} from "../realtime/runtime";
 import { useAuthStore } from "./auth";
 import { useServersStore } from "./servers";
 import type {
+  ClientChannelsUpdatedEventPayload,
   ClientDeleteServerResult,
+  ClientPresenceUpdatedEventPayload,
+  ClientRuntimePresenceMember,
   ClientServerInviteLink,
   ClientServerListItem,
   ClientServerSnapshot,
+  ClientServerUpdatedEventPayload,
   ClientUpdateServerInput,
   ClientVoiceChannel,
 } from "../types/server";
@@ -27,14 +36,26 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   const isInviteLinkLoading = ref(false);
   const isInviteLinkRegenerating = ref(false);
   const isDeletingServer = ref(false);
+  const isChangingPresence = ref(false);
   const errorMessage = ref<string | null>(null);
   const channelsErrorMessage = ref<string | null>(null);
   const serverUpdateErrorMessage = ref<string | null>(null);
   const inviteLinkErrorMessage = ref<string | null>(null);
   const deleteServerErrorMessage = ref<string | null>(null);
+  const presenceErrorMessage = ref<string | null>(null);
+  const presenceMembers = ref<ClientRuntimePresenceMember[]>([]);
 
   const serverApiClient = createServerApiClient({
     graphqlUrl: import.meta.env.VITE_GRAPHQL_URL || DEFAULT_CLIENT_GRAPHQL_URL,
+  });
+  const currentUserPresence = computed(() => {
+    const currentUserId = useAuthStore().currentUser?.id;
+
+    if (!currentUserId) {
+      return null;
+    }
+
+    return presenceMembers.value.find((member) => member.userId === currentUserId) ?? null;
   });
 
   /**
@@ -110,11 +131,14 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     isInviteLinkLoading.value = false;
     isInviteLinkRegenerating.value = false;
     isDeletingServer.value = false;
+    isChangingPresence.value = false;
     errorMessage.value = null;
     channelsErrorMessage.value = null;
     serverUpdateErrorMessage.value = null;
     inviteLinkErrorMessage.value = null;
     deleteServerErrorMessage.value = null;
+    presenceErrorMessage.value = null;
+    presenceMembers.value = [];
   }
 
   /**
@@ -247,6 +271,13 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   }
 
   /**
+   * Очищает ошибку runtime presence-команд.
+   */
+  function clearPresenceError(): void {
+    presenceErrorMessage.value = null;
+  }
+
+  /**
    * Обновляет название и аватар текущего выбранного сервера.
    */
   async function updateServerProfile(input: ClientUpdateServerInput): Promise<void> {
@@ -356,16 +387,18 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     errorMessage.value = null;
 
     try {
-      const nextSnapshot = await serverApiClient.serverSnapshot(
-        sessionToken,
-        selectedServerId.value,
-      );
+      const [nextSnapshot, nextPresenceSnapshot] = await Promise.all([
+        serverApiClient.serverSnapshot(sessionToken, selectedServerId.value),
+        serverApiClient.serverPresenceSnapshot(sessionToken, selectedServerId.value),
+      ]);
 
       snapshot.value = nextSnapshot;
+      presenceMembers.value = nextPresenceSnapshot.members;
       inviteLink.value = null;
       loadedServerId.value = selectedServerId.value;
     } catch (error) {
       snapshot.value = null;
+      presenceMembers.value = [];
       loadedServerId.value = null;
       errorMessage.value = toErrorMessage(error);
       throw error;
@@ -403,6 +436,128 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   }
 
   /**
+   * Применяет live-обновление метаданных уже открытого сервера без повторной загрузки snapshot.
+   */
+  function applyLiveServerUpdated(payload: ClientServerUpdatedEventPayload): void {
+    if (!snapshot.value || snapshot.value.server.id !== payload.serverId) {
+      return;
+    }
+
+    const nextServer: ClientServerListItem = {
+      ...snapshot.value.server,
+      name: payload.name,
+      avatarUrl: payload.avatarUrl,
+      isPublic: payload.isPublic,
+    };
+
+    replaceSnapshotServer(nextServer);
+    useServersStore().applyServerItem(nextServer);
+  }
+
+  /**
+   * Применяет live-обновление структуры каналов уже открытого сервера.
+   */
+  function applyLiveChannelsUpdated(payload: ClientChannelsUpdatedEventPayload): void {
+    if (!snapshot.value || snapshot.value.server.id !== payload.serverId) {
+      return;
+    }
+
+    replaceSnapshotChannels(payload.channels);
+  }
+
+  /**
+   * Применяет live-изменение runtime presence внутри текущего выбранного сервера.
+   */
+  function applyPresenceUpdated(payload: ClientPresenceUpdatedEventPayload): void {
+    if (!selectedServerId.value || payload.serverId !== selectedServerId.value) {
+      return;
+    }
+
+    if (payload.action === "left") {
+      presenceMembers.value = presenceMembers.value.filter(
+        (member) => member.userId !== payload.member.userId,
+      );
+      return;
+    }
+
+    const nextMembers = presenceMembers.value.filter(
+      (member) => member.userId !== payload.member.userId,
+    );
+
+    nextMembers.push(payload.member);
+    nextMembers.sort((left, right) => left.joinedAt.localeCompare(right.joinedAt));
+    presenceMembers.value = nextMembers;
+  }
+
+  /**
+   * Выполняет join или move команду для выбранного голосового канала.
+   */
+  async function joinOrMoveToChannel(channelId: string): Promise<void> {
+    const serverId = requireSelectedServerId();
+    const sessionToken = requireSessionToken();
+
+    isChangingPresence.value = true;
+    presenceErrorMessage.value = null;
+
+    try {
+      if (!currentUserPresence.value) {
+        await executeJoinVoiceChannelCommand({
+          sessionToken,
+          serverId,
+          channelId,
+        });
+        return;
+      }
+
+      if (currentUserPresence.value.channelId === channelId) {
+        return;
+      }
+
+      await executeMoveVoiceChannelCommand({
+        sessionToken,
+        serverId,
+        channelId: currentUserPresence.value.channelId,
+        targetChannelId: channelId,
+      });
+    } catch (error) {
+      presenceErrorMessage.value = toPresenceErrorMessage(error);
+      throw error;
+    } finally {
+      isChangingPresence.value = false;
+    }
+  }
+
+  /**
+   * Выполняет leave-команду для текущего voice presence пользователя.
+   */
+  async function leaveCurrentChannel(): Promise<void> {
+    const currentPresence = currentUserPresence.value;
+
+    if (!currentPresence) {
+      return;
+    }
+
+    const serverId = requireSelectedServerId();
+    const sessionToken = requireSessionToken();
+
+    isChangingPresence.value = true;
+    presenceErrorMessage.value = null;
+
+    try {
+      await executeLeaveVoiceChannelCommand({
+        sessionToken,
+        serverId,
+        channelId: currentPresence.channelId,
+      });
+    } catch (error) {
+      presenceErrorMessage.value = toPresenceErrorMessage(error);
+      throw error;
+    } finally {
+      isChangingPresence.value = false;
+    }
+  }
+
+  /**
    * Возвращает id текущего выбранного сервера или завершает операцию ошибкой.
    */
   function requireSelectedServerId(): string {
@@ -437,11 +592,15 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     isInviteLinkLoading,
     isInviteLinkRegenerating,
     isDeletingServer,
+    isChangingPresence,
     errorMessage,
     channelsErrorMessage,
     serverUpdateErrorMessage,
     inviteLinkErrorMessage,
     deleteServerErrorMessage,
+    presenceErrorMessage,
+    presenceMembers,
+    currentUserPresence,
     syncAvailableServers,
     openServer,
     reloadSelectedServer,
@@ -453,10 +612,16 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     loadInviteLink,
     regenerateInviteLink,
     deleteSelectedServer,
+    applyLiveServerUpdated,
+    applyLiveChannelsUpdated,
+    applyPresenceUpdated,
+    joinOrMoveToChannel,
+    leaveCurrentChannel,
     clearChannelsError,
     clearServerUpdateError,
     clearInviteLinkError,
     clearDeleteServerError,
+    clearPresenceError,
     reset,
   };
 });
@@ -514,6 +679,17 @@ function toDeleteServerErrorMessage(error: unknown): string {
   }
 
   return "Не удалось удалить сервер.";
+}
+
+/**
+ * Приводит неизвестную ошибку runtime presence-команд к читаемому сообщению.
+ */
+function toPresenceErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Не удалось изменить присутствие в канале.";
 }
 
 /**

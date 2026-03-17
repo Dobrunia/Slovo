@@ -38,6 +38,30 @@ export const REALTIME_COMMAND_NAMES = {
 } as const;
 
 /**
+ * Имена app-side Socket.IO-событий для подписки на runtime-каналы.
+ */
+export const SOCKET_RUNTIME_EVENT_NAMES = {
+  subscribeServerStructure: "runtime.subscribe-server-structure",
+  unsubscribeServerStructure: "runtime.unsubscribe-server-structure",
+  subscribeServerPresence: "runtime.subscribe-server-presence",
+  unsubscribeServerPresence: "runtime.unsubscribe-server-presence",
+} as const;
+
+/**
+ * Строит имя Socket.IO-room для live-структуры конкретного сервера.
+ */
+export function buildServerStructureRoom(serverId: string): string {
+  return `${REALTIME_CHANNEL_NAMES.serverStructure}:${serverId}`;
+}
+
+/**
+ * Строит имя Socket.IO-room для runtime presence конкретного сервера.
+ */
+export function buildServerPresenceRoom(serverId: string): string {
+  return `${REALTIME_CHANNEL_NAMES.serverPresence}:${serverId}`;
+}
+
+/**
  * Возвращает детерминированный каталог имен realtime-контрактов.
  */
 export function describeRealtimeContracts() {

@@ -2,8 +2,9 @@
 import { computed, ref } from "vue";
 import { DbrAvatar } from "dobruniaui-vue";
 import AppIconButton from "../../../components/base/AppIconButton.vue";
+import type { ClientRuntimePresenceMember } from "../../../types/server";
 import ServerSettingsModal from "../ServerSettingsModal.vue";
-import ServerChannelListItem from "./ServerChannelListItem.vue";
+import ServerChannelPresenceListItem from "./ServerChannelPresenceListItem.vue";
 import settingsIcon from "../../../assets/icons/settings.svg";
 import { useServerModuleStore } from "../../../stores/serverModule";
 
@@ -35,6 +36,7 @@ const canManageServer = computed(() => selectedServer.value?.role === "OWNER");
  * Возвращает список каналов выбранного сервера.
  */
 const channels = computed(() => snapshot.value?.channels ?? []);
+const presenceMembers = computed(() => serverModuleStore.presenceMembers);
 
 /**
  * Открывает модальное окно редактирования текущего сервера.
@@ -59,6 +61,13 @@ function closeServerSettings(): void {
  */
 function handleSelectChannel(channelId: string): void {
   emit("selectChannel", channelId);
+}
+
+/**
+ * Возвращает runtime-участников конкретного канала выбранного сервера.
+ */
+function getChannelParticipants(channelId: string): ClientRuntimePresenceMember[] {
+  return presenceMembers.value.filter((member) => member.channelId === channelId);
 }
 </script>
 
@@ -93,12 +102,13 @@ function handleSelectChannel(channelId: string): void {
       v-if="channels.length > 0"
       class="server-channel-list-module__channels"
     >
-      <ServerChannelListItem
+      <ServerChannelPresenceListItem
         v-for="channel in channels"
         :key="channel.id"
         :channel-id="channel.id"
         :name="channel.name"
         :is-selected="channel.id === props.selectedChannelId"
+        :participants="getChannelParticipants(channel.id)"
         @select="handleSelectChannel"
       />
     </div>

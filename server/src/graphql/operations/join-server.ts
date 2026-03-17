@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { mutation } from 'strictql';
 import { authenticatedPolicy } from '../../auth/policies.js';
 import { requireCurrentUser } from '../../auth/require.js';
+import { emitSystemRealtimeEvent } from '../../realtime/runtime.js';
 import { REALTIME_EVENT_NAMES } from '../../../../shared/realtime/names.js';
 import { publicServerListItemSchema, toPublicServerListItem } from '../../server/public-server.js';
 import type { GraphqlContext } from '../context.js';
@@ -92,7 +93,7 @@ export const joinServerMutation = mutation({
     });
 
     if (graphqlContext.realtimeRuntime) {
-      await graphqlContext.realtimeRuntime.emitEvent(REALTIME_EVENT_NAMES.userServersUpdated, {
+      await emitSystemRealtimeEvent(graphqlContext.realtimeRuntime, REALTIME_EVENT_NAMES.userServersUpdated, {
         userId,
         serverId: server.id,
         action: 'joined',

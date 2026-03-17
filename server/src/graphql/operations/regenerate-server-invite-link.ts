@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { mutation } from 'strictql';
 import { authenticatedPolicy } from '../../auth/policies.js';
 import { requireCurrentUser } from '../../auth/require.js';
+import { emitSystemRealtimeEvent } from '../../realtime/runtime.js';
 import { REALTIME_EVENT_NAMES } from '../../../../shared/realtime/names.js';
 import { requireServerOwner } from '../../server/access.js';
 import {
@@ -48,7 +49,7 @@ export const regenerateServerInviteLinkMutation = mutation({
     });
 
     if (graphqlContext.realtimeRuntime) {
-      await graphqlContext.realtimeRuntime.emitEvent(REALTIME_EVENT_NAMES.serverUpdated, {
+      await emitSystemRealtimeEvent(graphqlContext.realtimeRuntime, REALTIME_EVENT_NAMES.serverUpdated, {
         serverId: server.id,
         name: server.name,
         avatarUrl: server.avatarUrl,

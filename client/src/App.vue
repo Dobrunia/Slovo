@@ -1,9 +1,6 @@
 <template>
   <main class="app-shell dbru-root dbru-theme-sketch">
-    <div
-      v-if="isGuestRoute"
-      :class="guestShellClassName"
-    >
+    <div v-if="isGuestRoute" :class="guestShellClassName">
       <RouterView />
     </div>
 
@@ -14,9 +11,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import { useRoute } from "vue-router";
-import { RouterView } from "vue-router";
+import { computed } from 'vue';
+import { useRoute } from 'vue-router';
+import { RouterView } from 'vue-router';
 
 const route = useRoute();
 
@@ -29,11 +26,11 @@ const isGuestRoute = computed(() => Boolean(route.meta.guestOnly));
  * Вычисляет класс layout-контейнера для текущего гостевого экрана.
  */
 const guestShellClassName = computed(() =>
-  route.meta.guestLayout === "landing"
-    ? "guest-shell guest-shell--landing"
-    : route.meta.guestLayout === "register"
-      ? "guest-shell guest-shell--register"
-      : "guest-shell guest-shell--login",
+  route.meta.guestLayout === 'landing'
+    ? 'guest-shell guest-shell--landing'
+    : route.meta.guestLayout === 'register'
+      ? 'guest-shell guest-shell--register'
+      : 'guest-shell guest-shell--login'
 );
 </script>
 
@@ -54,21 +51,21 @@ const guestShellClassName = computed(() =>
 .guest-shell--login {
   overflow: auto;
   background:
-    url("./assets/login_back.png") center / cover no-repeat,
+    url('./assets/login_back.png') center / cover no-repeat,
     var(--dbru-color-bg);
 }
 
 .guest-shell--register {
   overflow: auto;
   background:
-    url("./assets/reg_back.png") center bottom / cover no-repeat,
+    url('./assets/reg_back.png') center bottom / cover no-repeat,
     var(--dbru-color-bg);
 }
 
 .guest-shell--landing {
   overflow: hidden;
   background:
-    url("./assets/landing_back.png") center bottom / cover no-repeat,
+    url('./assets/landing_back.png') center bottom / cover no-repeat,
     var(--dbru-color-bg);
 }
 

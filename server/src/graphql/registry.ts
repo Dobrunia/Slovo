@@ -17,6 +17,7 @@ import { reorderVoiceChannelsMutation } from './operations/reorder-voice-channel
 import { registerMutation } from './operations/register.js';
 import { searchPublicServersQuery } from './operations/search-public-servers.js';
 import { serverSnapshotQuery } from './operations/server-snapshot.js';
+import { serverPresenceSnapshotQuery } from './operations/server-presence-snapshot.js';
 import { serverInviteLinkQuery } from './operations/server-invite-link.js';
 import { updateAvatarMutation } from './operations/update-avatar.js';
 import { updateDisplayNameMutation } from './operations/update-display-name.js';
@@ -33,6 +34,7 @@ export const queries = [
   myServersQuery,
   searchPublicServersQuery,
   serverSnapshotQuery,
+  serverPresenceSnapshotQuery,
   serverInviteLinkQuery,
 ];
 

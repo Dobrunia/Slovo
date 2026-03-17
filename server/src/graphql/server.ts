@@ -4,11 +4,13 @@ import type { DataLayer } from '../data/prisma.js';
 import { DEFAULT_CLIENT_ORIGIN, DEFAULT_GRAPHQL_PATH } from '../config/constants.js';
 import { createGraphqlContext } from './context.js';
 import { strictqlApiSchema } from './registry.js';
+import type { RuntimePresenceRegistry } from '../realtime/presence.js';
 import type { SlovoRealtimeRuntime } from '../realtime/runtime.js';
 
 type GraphqlServerInput = {
   dataLayer: DataLayer;
   realtimeRuntime?: SlovoRealtimeRuntime | null;
+  presenceRegistry?: RuntimePresenceRegistry | null;
 };
 
 /**
@@ -25,6 +27,7 @@ export function createGraphqlServer(input: GraphqlServerInput) {
       createGraphqlContext({
         dataLayer: input.dataLayer,
         realtimeRuntime: input.realtimeRuntime,
+        presenceRegistry: input.presenceRegistry,
         request: adapterContext as Request,
       }),
   });

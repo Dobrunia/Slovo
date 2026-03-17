@@ -6,6 +6,18 @@ import { useServerModuleStore } from "../src/stores/serverModule";
 import { useServersStore } from "../src/stores/servers";
 import type { ClientUser } from "../src/types/auth";
 
+const realtimeMocks = vi.hoisted(() => ({
+  join: vi.fn(),
+  leave: vi.fn(),
+  move: vi.fn(),
+}));
+
+vi.mock("../src/realtime/runtime", () => ({
+  executeJoinVoiceChannelCommand: realtimeMocks.join,
+  executeLeaveVoiceChannelCommand: realtimeMocks.leave,
+  executeMoveVoiceChannelCommand: realtimeMocks.move,
+}));
+
 const testUser: ClientUser = {
   id: "user-1",
   email: "user@example.com",
@@ -18,6 +30,9 @@ describe("server module store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     vi.restoreAllMocks();
+    realtimeMocks.join.mockReset();
+    realtimeMocks.leave.mockReset();
+    realtimeMocks.move.mockReset();
   });
 
   /**
@@ -29,28 +44,47 @@ describe("server module store", () => {
    * первый id из списка и выполнить запрос с session token текущего пользователя.
    */
   test("should pick the first available server and load its snapshot", async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      createGraphqlResponse({
-        data: {
-          serverSnapshot: {
-            server: {
-              id: "server-1",
-              name: "Основной сервер",
-              avatarUrl: null,
-              isPublic: false,
-              role: "OWNER",
-            },
-            channels: [
-              {
-                id: "channel-1",
-                name: "Общий",
-                sortOrder: 0,
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            serverSnapshot: {
+              server: {
+                id: "server-1",
+                name: "Основной сервер",
+                avatarUrl: null,
+                isPublic: false,
+                role: "OWNER",
               },
-            ],
+              channels: [
+                {
+                  id: "channel-1",
+                  name: "Общий",
+                  sortOrder: 0,
+                },
+              ],
+            },
           },
-        },
-      }),
-    );
+        }),
+      )
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            serverPresenceSnapshot: {
+              members: [
+                {
+                  userId: "user-1",
+                  displayName: "Добрыня",
+                  avatarUrl: null,
+                  channelId: "channel-1",
+                  joinedAt: "2026-03-17T10:00:00.000Z",
+                },
+              ],
+            },
+          },
+        }),
+      );
 
     vi.stubGlobal("fetch", fetchMock);
 
@@ -67,6 +101,15 @@ describe("server module store", () => {
     expect(serverModuleStore.selectedServerId).toBe("server-1");
     expect(serverModuleStore.snapshot?.server.name).toBe("Основной сервер");
     expect(serverModuleStore.snapshot?.channels).toHaveLength(1);
+    expect(serverModuleStore.presenceMembers).toEqual([
+      {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-17T10:00:00.000Z",
+      },
+    ]);
     expect(fetchMock).toHaveBeenCalledWith(
       DEFAULT_CLIENT_GRAPHQL_URL,
       expect.objectContaining({
@@ -77,13 +120,19 @@ describe("server module store", () => {
       }),
     );
 
-    const requestInit = fetchMock.mock.calls.at(0)?.[1] as RequestInit;
-    const payload = JSON.parse(String(requestInit.body)) as {
+    const snapshotRequestInit = fetchMock.mock.calls.at(0)?.[1] as RequestInit;
+    const snapshotPayload = JSON.parse(String(snapshotRequestInit.body)) as {
+      query: string;
+    };
+    const presenceRequestInit = fetchMock.mock.calls.at(1)?.[1] as RequestInit;
+    const presencePayload = JSON.parse(String(presenceRequestInit.body)) as {
       query: string;
     };
 
-    expect(payload.query).toContain("serverSnapshot");
-    expect(payload.query).toContain('serverId: "server-1"');
+    expect(snapshotPayload.query).toContain("serverSnapshot");
+    expect(snapshotPayload.query).toContain('serverId: "server-1"');
+    expect(presencePayload.query).toContain("serverPresenceSnapshot");
+    expect(presencePayload.query).toContain('serverId: "server-1"');
   });
 
   /**
@@ -548,6 +597,288 @@ describe("server module store", () => {
         role: "MEMBER",
       },
     ]);
+  });
+
+  /**
+   * Проверяется, что live-событие обновления сервера меняет текущий snapshot
+   * и тот же сервер в верхнем списке серверов без повторного GraphQL-запроса.
+   * Это важно, потому что изменение названия или аватара сервером другим клиентом
+   * должно сразу синхронизироваться в открытом серверном экране и в navigation rail.
+   * Граничные случаи: роль пользователя не должна потеряться, а обновление должно
+   * применяться только к уже открытому серверу, не ломая остальные элементы списка.
+   */
+  test("should apply a live server update to both the snapshot and the server rail", () => {
+    const serversStore = useServersStore();
+    serversStore.items = [
+      {
+        id: "server-1",
+        name: "Старое имя",
+        avatarUrl: null,
+        isPublic: false,
+        role: "OWNER",
+      },
+      {
+        id: "server-2",
+        name: "Другой сервер",
+        avatarUrl: null,
+        isPublic: false,
+        role: "MEMBER",
+      },
+    ];
+
+    const serverModuleStore = useServerModuleStore();
+    serverModuleStore.snapshot = {
+      server: {
+        id: "server-1",
+        name: "Старое имя",
+        avatarUrl: null,
+        isPublic: false,
+        role: "OWNER",
+      },
+      channels: [],
+    };
+
+    serverModuleStore.applyLiveServerUpdated({
+      serverId: "server-1",
+      name: "Новое имя",
+      avatarUrl: "https://cdn.example.com/server.png",
+      isPublic: true,
+      updatedAt: "2026-03-17T10:00:00.000Z",
+    });
+
+    expect(serverModuleStore.snapshot?.server).toEqual({
+      id: "server-1",
+      name: "Новое имя",
+      avatarUrl: "https://cdn.example.com/server.png",
+      isPublic: true,
+      role: "OWNER",
+    });
+    expect(serversStore.items).toEqual([
+      {
+        id: "server-1",
+        name: "Новое имя",
+        avatarUrl: "https://cdn.example.com/server.png",
+        isPublic: true,
+        role: "OWNER",
+      },
+      {
+        id: "server-2",
+        name: "Другой сервер",
+        avatarUrl: null,
+        isPublic: false,
+        role: "MEMBER",
+      },
+    ]);
+  });
+
+  /**
+   * Проверяется, что live-событие обновления каналов заменяет структуру только
+   * у действительно открытого сервера и игнорируется для чужого `serverId`.
+   * Это важно, потому что один клиент может получать несколько live-событий подряд,
+   * и серверный экран не должен случайно перетирать свой snapshot чужими данными.
+   * Граничные случаи: сначала приходит событие для другого сервера и ничего не меняет,
+   * затем событие для текущего сервера полностью заменяет локальный список каналов.
+   */
+  test("should apply live channel updates only for the currently opened server", () => {
+    const serverModuleStore = useServerModuleStore();
+    serverModuleStore.snapshot = {
+      server: {
+        id: "server-1",
+        name: "Основной сервер",
+        avatarUrl: null,
+        isPublic: false,
+        role: "OWNER",
+      },
+      channels: [
+        {
+          id: "channel-1",
+          name: "Общий",
+          sortOrder: 0,
+        },
+      ],
+    };
+
+    serverModuleStore.applyLiveChannelsUpdated({
+      serverId: "server-2",
+      channels: [
+        {
+          id: "channel-x",
+          name: "Чужой",
+          sortOrder: 0,
+        },
+      ],
+      updatedAt: "2026-03-17T10:00:00.000Z",
+    });
+
+    expect(serverModuleStore.snapshot?.channels).toEqual([
+      {
+        id: "channel-1",
+        name: "Общий",
+        sortOrder: 0,
+      },
+    ]);
+
+    serverModuleStore.applyLiveChannelsUpdated({
+      serverId: "server-1",
+      channels: [
+        {
+          id: "channel-2",
+          name: "Стрим",
+          sortOrder: 0,
+        },
+        {
+          id: "channel-1",
+          name: "Общий",
+          sortOrder: 1,
+        },
+      ],
+      updatedAt: "2026-03-17T10:01:00.000Z",
+    });
+
+    expect(serverModuleStore.snapshot?.channels).toEqual([
+      {
+        id: "channel-2",
+        name: "Стрим",
+        sortOrder: 0,
+      },
+      {
+        id: "channel-1",
+        name: "Общий",
+        sortOrder: 1,
+      },
+    ]);
+  });
+
+  /**
+   * Проверяется, что delta-события presence корректно добавляют, перемещают
+   * и удаляют участников внутри текущего выбранного сервера.
+   * Это важно, потому что live-UI опирается не на полный reload, а на поток
+   * `presence.updated`, и store должен уметь детерминированно применять такие изменения.
+   * Граничные случаи: сначала пользователь заходит в канал, затем перемещается,
+   * а после события `left` должен полностью исчезнуть из локального snapshot-а.
+   */
+  test("should apply live presence updates as join move and leave deltas", () => {
+    const serverModuleStore = useServerModuleStore();
+    serverModuleStore.selectedServerId = "server-1";
+
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-2",
+        displayName: "Алиса",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-17T10:00:00.000Z",
+      },
+      previousChannelId: null,
+      action: "joined",
+      occurredAt: "2026-03-17T10:00:00.000Z",
+    });
+
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-2",
+        displayName: "Алиса",
+        avatarUrl: null,
+        channelId: "channel-2",
+        joinedAt: "2026-03-17T10:00:00.000Z",
+      },
+      previousChannelId: "channel-1",
+      action: "moved",
+      occurredAt: "2026-03-17T10:01:00.000Z",
+    });
+
+    expect(serverModuleStore.presenceMembers).toEqual([
+      {
+        userId: "user-2",
+        displayName: "Алиса",
+        avatarUrl: null,
+        channelId: "channel-2",
+        joinedAt: "2026-03-17T10:00:00.000Z",
+      },
+    ]);
+
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-2",
+        displayName: "Алиса",
+        avatarUrl: null,
+        channelId: "channel-2",
+        joinedAt: "2026-03-17T10:00:00.000Z",
+      },
+      previousChannelId: "channel-2",
+      action: "left",
+      occurredAt: "2026-03-17T10:02:00.000Z",
+    });
+
+    expect(serverModuleStore.presenceMembers).toEqual([]);
+  });
+
+  /**
+   * Проверяется, что store выбирает правильную realtime-команду для канала:
+   * первый вход делает `join`, смена канала делает `move`, а повторный клик
+   * по текущему каналу может завершиться отдельным `leaveCurrentChannel`.
+   * Это важно, потому что именно store решает, какую live-команду отправить,
+   * и ошибка здесь сломает весь voice-flow при кликах по списку каналов.
+   * Граничные случаи: сначала пользователь не находится в канале,
+   * затем уже находится в одном канале и переходит в другой.
+   */
+  test("should execute join move and leave voice commands from the current presence state", async () => {
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+    authStore.sessionToken = "active-session-token";
+    authStore.status = "authenticated";
+    authStore.isInitialized = true;
+
+    const serverModuleStore = useServerModuleStore();
+    serverModuleStore.selectedServerId = "server-1";
+
+    await serverModuleStore.joinOrMoveToChannel("channel-1");
+
+    expect(realtimeMocks.join).toHaveBeenCalledWith({
+      sessionToken: "active-session-token",
+      serverId: "server-1",
+      channelId: "channel-1",
+    });
+
+    serverModuleStore.presenceMembers = [
+      {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-17T10:00:00.000Z",
+      },
+    ];
+
+    await serverModuleStore.joinOrMoveToChannel("channel-2");
+
+    expect(realtimeMocks.move).toHaveBeenCalledWith({
+      sessionToken: "active-session-token",
+      serverId: "server-1",
+      channelId: "channel-1",
+      targetChannelId: "channel-2",
+    });
+
+    serverModuleStore.presenceMembers = [
+      {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        channelId: "channel-2",
+        joinedAt: "2026-03-17T10:00:00.000Z",
+      },
+    ];
+
+    await serverModuleStore.leaveCurrentChannel();
+
+    expect(realtimeMocks.leave).toHaveBeenCalledWith({
+      sessionToken: "active-session-token",
+      serverId: "server-1",
+      channelId: "channel-2",
+    });
   });
 });
 
