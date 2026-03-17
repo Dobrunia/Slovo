@@ -32,13 +32,11 @@
               :to="buildServerRoute(server.id)"
               replace
               class="server-rail__server-button"
-              :class="{
-                'server-rail__server-button--selected': server.id === selectedServerId,
-              }"
               :aria-label="server.name"
               :title="server.name"
             >
               <DbrAvatar
+                :active="server.id === selectedServerId"
                 :src="server.avatarUrl ?? undefined"
                 :name="server.name"
                 size="md"
@@ -366,26 +364,12 @@ onBeforeUnmount(() => {
 .server-rail__server-button {
   display: grid;
   place-items: center;
-  padding: var(--dbru-space-1);
   border: 0;
   border-radius: var(--dbru-radius-md);
   background: transparent;
-  box-shadow: inset 0 0 0 var(--dbru-border-size-1) transparent;
   text-decoration: none;
   cursor: pointer;
-  transition:
-    background-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
-}
-
-.server-rail__server-button:hover {
-  background: var(--dbru-color-bg);
-}
-
-.server-rail__server-button--selected {
-  background: var(--dbru-color-surface);
-  box-shadow: inset 0 0 0 var(--dbru-border-size-1) var(--dbru-color-primary);
+  transition: transform 160ms ease;
 }
 
 .server-rail__server-button:focus-visible {

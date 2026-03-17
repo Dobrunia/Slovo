@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from "vue";
+
 /**
  * Свойства универсальной прозрачной иконкокнопки.
  */
@@ -9,10 +11,23 @@ interface AppIconButtonProps {
   tone?: "default" | "danger";
 }
 
-withDefaults(defineProps<AppIconButtonProps>(), {
+const props = withDefaults(defineProps<AppIconButtonProps>(), {
   iconSrc: "",
   iconAlt: "",
   tone: "default",
+});
+
+/**
+ * Возвращает CSS-переменную с источником иконки для mask-рендера.
+ */
+const iconStyle = computed(() => {
+  if (!props.iconSrc) {
+    return undefined;
+  }
+
+  return {
+    "--app-icon-button-icon-src": `url("${props.iconSrc}")`,
+  };
 });
 </script>
 
@@ -26,11 +41,11 @@ withDefaults(defineProps<AppIconButtonProps>(), {
     :aria-label="label"
   >
     <slot name="icon">
-      <img
+      <span
         v-if="iconSrc"
         class="app-icon-button__image"
-        :src="iconSrc"
-        :alt="iconAlt"
+        :style="iconStyle"
+        aria-hidden="true"
       />
     </slot>
   </button>
@@ -76,5 +91,14 @@ withDefaults(defineProps<AppIconButtonProps>(), {
   display: block;
   width: 1.375rem;
   height: 1.375rem;
+  background-color: currentColor;
+  -webkit-mask-image: var(--app-icon-button-icon-src);
+  mask-image: var(--app-icon-button-icon-src);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 </style>

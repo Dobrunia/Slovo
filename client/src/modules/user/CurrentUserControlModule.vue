@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { DbrAvatar } from "dobruniaui-vue";
-import rawHeadphonesIcon from "../../assets/icons/headphones.svg?raw";
-import rawHeadphonesOffIcon from "../../assets/icons/headphones-off.svg?raw";
-import rawMicIcon from "../../assets/icons/mic.svg?raw";
-import rawMicOffIcon from "../../assets/icons/mic-off.svg?raw";
+import headphonesIcon from "../../assets/icons/headphones.svg";
+import headphonesOffIcon from "../../assets/icons/headphones-off.svg";
+import micIcon from "../../assets/icons/mic.svg";
+import micOffIcon from "../../assets/icons/mic-off.svg";
 import AppHeadingBlock from "../../components/base/AppHeadingBlock.vue";
 import AppIconButton from "../../components/base/AppIconButton.vue";
 import { useAuthStore } from "../../stores/auth";
@@ -16,15 +16,6 @@ const isHeadphonesMuted = ref(false);
 const profileName = computed(() => authStore.currentUser?.displayName ?? "Пользователь");
 const profileHandle = computed(() =>
   authStore.currentUser?.username ? `@${authStore.currentUser.username}` : "@slovo-user",
-);
-
-const microphoneMarkup = computed(() =>
-  isMicrophoneMuted.value ? sanitizeIconMarkup(rawMicOffIcon) : sanitizeIconMarkup(rawMicIcon),
-);
-const headphonesMarkup = computed(() =>
-  isHeadphonesMuted.value
-    ? sanitizeIconMarkup(rawHeadphonesOffIcon)
-    : sanitizeIconMarkup(rawHeadphonesIcon),
 );
 
 /**
@@ -39,16 +30,6 @@ function toggleMicrophone(): void {
  */
 function toggleHeadphones(): void {
   isHeadphonesMuted.value = !isHeadphonesMuted.value;
-}
-
-/**
- * Нормализует SVG-иконку для inline-render и переводит цвета в currentColor.
- */
-function sanitizeIconMarkup(markup: string): string {
-  return markup
-    .replace(/<rect[\s\S]*?\/>/gi, "")
-    .replace(/fill="(?!none)[^"]*"/gi, 'fill="currentColor"')
-    .replace(/stroke="(?!none)[^"]*"/gi, 'stroke="currentColor"');
 }
 </script>
 
@@ -73,32 +54,20 @@ function sanitizeIconMarkup(markup: string): string {
 
     <div class="current-user-control-module__actions">
       <AppIconButton
+        :icon-src="isMicrophoneMuted ? micOffIcon : micIcon"
         :label="isMicrophoneMuted ? 'Включить микрофон' : 'Выключить микрофон'"
         :tone="isMicrophoneMuted ? 'danger' : 'default'"
+        icon-alt=""
         @click="toggleMicrophone"
-      >
-        <template #icon>
-          <span
-            class="current-user-control-module__icon"
-            aria-hidden="true"
-            v-html="microphoneMarkup"
-          />
-        </template>
-      </AppIconButton>
+      />
 
       <AppIconButton
+        :icon-src="isHeadphonesMuted ? headphonesOffIcon : headphonesIcon"
         :label="isHeadphonesMuted ? 'Включить наушники' : 'Выключить наушники'"
         :tone="isHeadphonesMuted ? 'danger' : 'default'"
+        icon-alt=""
         @click="toggleHeadphones"
-      >
-        <template #icon>
-          <span
-            class="current-user-control-module__icon"
-            aria-hidden="true"
-            v-html="headphonesMarkup"
-          />
-        </template>
-      </AppIconButton>
+      />
     </div>
   </section>
 </template>
@@ -137,21 +106,6 @@ function sanitizeIconMarkup(markup: string): string {
   align-items: center;
   gap: var(--dbru-space-2);
   flex-shrink: 0;
-}
-
-.current-user-control-module__icon {
-  display: inline-flex;
-  width: 1.375rem;
-  height: 1.375rem;
-}
-
-.current-user-control-module__icon :deep(svg) {
-  display: block;
-  width: 100%;
-  height: 100%;
-  fill: currentColor;
-  stroke: currentColor;
-  overflow: visible;
 }
 
 @media (max-width: 640px) {
