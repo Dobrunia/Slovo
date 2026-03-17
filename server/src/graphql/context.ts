@@ -1,6 +1,6 @@
-import { resolveSessionUserId } from "../auth/session.js";
-import type { DataLayer } from "../data/prisma.js";
-import type { SlovoRealtimeRuntime } from "../realtime/runtime.js";
+import { resolveSessionUserId } from '../auth/session.js';
+import type { DataLayer } from '../data/prisma.js';
+import type { SlovoRealtimeRuntime } from '../realtime/runtime.js';
 
 /**
  * Контекст GraphQL-запроса, общий для StrictQL-резолверов.

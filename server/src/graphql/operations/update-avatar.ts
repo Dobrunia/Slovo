@@ -1,10 +1,11 @@
-import { z } from "zod";
-import { mutation } from "strictql";
-import { authenticatedPolicy } from "../../auth/policies.js";
-import { USER_AVATAR_URL_MAX_LENGTH } from "../../config/constants.js";
-import { publicUserSchema, toPublicUser } from "../../auth/user.js";
-import { REALTIME_EVENT_NAMES } from "../../../../shared/realtime/names.js";
-import type { GraphqlContext } from "../context.js";
+import { z } from 'zod';
+import { mutation } from 'strictql';
+import { authenticatedPolicy } from '../../auth/policies.js';
+import { requireCurrentUser } from '../../auth/require.js';
+import { USER_AVATAR_URL_MAX_LENGTH } from '../../config/constants.js';
+import { publicUserSchema, toPublicUser } from '../../auth/user.js';
+import { REALTIME_EVENT_NAMES } from '../../../../shared/realtime/names.js';
+import type { GraphqlContext } from '../context.js';
 
 const updateAvatarInputSchema = z.object({
   avatarUrl: z.string().max(USER_AVATAR_URL_MAX_LENGTH).nullable(),
@@ -19,7 +20,7 @@ const updateAvatarOutputSchema = z.object({
  * с обязательной realtime-рассылкой обновленного профиля.
  */
 export const updateAvatarMutation = mutation({
-  name: "updateAvatar",
+  name: 'updateAvatar',
   policy: authenticatedPolicy,
   input: updateAvatarInputSchema,
   output: updateAvatarOutputSchema,
@@ -31,16 +32,13 @@ export const updateAvatarMutation = mutation({
     ctx: unknown;
   }) => {
     const graphqlContext = ctx as GraphqlContext;
-
-    if (!graphqlContext.userId) {
-      throw new Error("Требуется авторизация.");
-    }
+    const userId = requireCurrentUser(graphqlContext);
 
     const normalizedAvatarUrl = normalizeAvatarUrl(input.avatarUrl);
 
     const updatedUser = await graphqlContext.dataLayer.prisma.user.update({
       where: {
-        id: graphqlContext.userId,
+        id: userId,
       },
       data: {
         avatarUrl: normalizedAvatarUrl,
@@ -48,15 +46,12 @@ export const updateAvatarMutation = mutation({
     });
 
     if (graphqlContext.realtimeRuntime) {
-      await graphqlContext.realtimeRuntime.emitEvent(
-        REALTIME_EVENT_NAMES.profileUpdated,
-        {
-          userId: updatedUser.id,
-          displayName: updatedUser.displayName,
-          avatarUrl: updatedUser.avatarUrl,
-          updatedAt: updatedUser.updatedAt.toISOString(),
-        },
-      );
+      await graphqlContext.realtimeRuntime.emitEvent(REALTIME_EVENT_NAMES.profileUpdated, {
+        userId: updatedUser.id,
+        displayName: updatedUser.displayName,
+        avatarUrl: updatedUser.avatarUrl,
+        updatedAt: updatedUser.updatedAt.toISOString(),
+      });
     }
 
     return {
@@ -83,7 +78,7 @@ function normalizeAvatarUrl(avatarUrl: string | null): string | null {
   const parseResult = z.string().url().safeParse(normalizedAvatarUrl);
 
   if (!parseResult.success) {
-    throw new Error("Аватар должен быть валидным URL.");
+    throw new Error('Аватар должен быть валидным URL.');
   }
 
   return normalizedAvatarUrl;

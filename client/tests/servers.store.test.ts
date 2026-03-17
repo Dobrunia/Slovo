@@ -1,129 +1,106 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import { DEFAULT_CLIENT_GRAPHQL_URL } from "../src/constants";
-import { useAuthStore } from "../src/stores/auth";
-import { useServersStore } from "../src/stores/servers";
-import type { ClientUser } from "../src/types/auth";
-import type { ClientServerListItem } from "../src/types/server";
 
-const authenticatedUser: ClientUser = {
-  id: "user-1",
-  email: "user@example.com",
-  username: "dobrunia",
-  displayName: "Добрыня",
-  avatarUrl: null,
-};
+const myServersMock = vi.fn();
+const createServerMock = vi.fn();
 
-const testServers: ClientServerListItem[] = [
-  {
-    id: "server-2",
-    name: "Beta",
-    avatarUrl: "https://example.com/beta.png",
-    isPublic: true,
-    role: "MEMBER",
-  },
-  {
-    id: "server-1",
-    name: "Alpha",
-    avatarUrl: null,
-    isPublic: false,
-    role: "OWNER",
-  },
-];
+vi.mock("../src/graphql/servers", () => ({
+  createServersApiClient: () => ({
+    myServers: myServersMock,
+    createServer: createServerMock,
+  }),
+}));
 
 describe("servers store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
-    vi.restoreAllMocks();
+    myServersMock.mockReset();
+    createServerMock.mockReset();
+    window.localStorage.clear();
   });
 
-  /**
-   * Проверяется, что Pinia store списка серверов умеет загрузить private initial load
-   * для текущего пользователя и положить его в реактивное состояние без лишних преобразований.
-   * Это важно, потому что именно этот store будет питать основную навигацию приложения после логина,
-   * и если здесь потеряется session token или payload, пользователь увидит пустой интерфейс.
-   * Граничные случаи: запрос должен идти на стандартный GraphQL endpoint с auth headers,
-   * а store обязан перейти в loaded-state и сохранить полученные серверы в исходном порядке ответа.
-   */
-  test("should load the current user's servers into the store", async () => {
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
-      createGraphqlResponse({
-        data: {
-          myServers: testServers,
-        },
-      }),
-    );
+  it("should load the current user server list into the store", async () => {
+    /**
+     * Проверяется, что store корректно загружает список серверов
+     * для активной пользовательской сессии и сохраняет его в локальном состоянии.
+     * Это важно, потому что верхний rail серверов полностью зависит от этого состояния
+     * и не должен показывать пустой список при успешном ответе backend.
+     * Граничные случаи: до загрузки store пустой, после загрузки помечается как загруженный.
+     */
+    const testServers = [
+      {
+        id: "server-1",
+        name: "Alpha",
+        avatarUrl: null,
+        isPublic: false,
+        role: "OWNER" as const,
+      },
+      {
+        id: "server-2",
+        name: "Beta",
+        avatarUrl: "https://example.com/beta.png",
+        isPublic: true,
+        role: "MEMBER" as const,
+      },
+    ];
 
-    vi.stubGlobal("fetch", fetchMock);
+    myServersMock.mockResolvedValueOnce(testServers);
+
+    const [{ useAuthStore }, { useServersStore }] = await Promise.all([
+      import("../src/stores/auth"),
+      import("../src/stores/servers"),
+    ]);
 
     const authStore = useAuthStore();
-    authStore.currentUser = authenticatedUser;
     authStore.sessionToken = "session-token";
-    authStore.status = "authenticated";
-    authStore.isInitialized = true;
 
     const store = useServersStore();
 
-    await store.loadServers();
+    await expect(store.loadServers()).resolves.toBeUndefined();
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      DEFAULT_CLIENT_GRAPHQL_URL,
-      expect.objectContaining({
-        method: "POST",
-        headers: expect.objectContaining({
-          authorization: "Bearer session-token",
-        }),
-      }),
-    );
+    expect(myServersMock).toHaveBeenCalledWith("session-token");
     expect(store.items).toEqual(testServers);
-    expect(store.isLoaded).toBe(true);
     expect(store.errorMessage).toBeNull();
+    expect(store.isLoaded).toBe(true);
+    expect(store.loadedForSessionToken).toBe("session-token");
   });
 
-  /**
-   * Проверяется, что store корректно обнуляет список и записывает сообщение об ошибке,
-   * если GraphQL-загрузка серверов не удалась.
-   * Это важно, потому что при сбое initial load пользователь не должен видеть устаревшие данные,
-   * а UI обязан получить явный error-state вместо тихого зависания в прежнем списке.
-   * Граничные случаи: store должен очистить уже существующие элементы,
-   * завершить loading-state и сохранить текст ошибки из GraphQL response.
-   */
-  test("should clear stale servers and expose an error when loading fails", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>().mockResolvedValue(
-        createGraphqlResponse({
-          errors: [{ message: "SERVERS_LOAD_FAILED" }],
-        }),
-      ),
+  it("should clear stale servers and expose a safe generic message when loading fails", async () => {
+    /**
+     * Проверяется, что store очищает устаревший список серверов
+     * и не показывает пользователю сырую техническую ошибку backend при неудачной загрузке.
+     * Это важно, потому что ошибки уровня Prisma, SQL или схемы БД не должны попадать в интерфейс
+     * и не должны оставлять на экране старые данные, которые уже нельзя считать актуальными.
+     * Граничные случаи: до ошибки в store уже лежат серверы, а backend возвращает подробный внутренний текст.
+     */
+    myServersMock.mockRejectedValueOnce(
+      new Error("The column `slovo.Server.inviteToken` does not exist in the current database."),
     );
 
+    const [{ useAuthStore }, { useServersStore }] = await Promise.all([
+      import("../src/stores/auth"),
+      import("../src/stores/servers"),
+    ]);
+
     const authStore = useAuthStore();
-    authStore.currentUser = authenticatedUser;
     authStore.sessionToken = "session-token";
-    authStore.status = "authenticated";
-    authStore.isInitialized = true;
 
     const store = useServersStore();
-    store.items = [...testServers];
+    store.items = [
+      {
+        id: "stale-server",
+        name: "Old data",
+        avatarUrl: null,
+        isPublic: false,
+        role: "OWNER",
+      },
+    ];
 
-    await expect(store.loadServers()).rejects.toThrow("SERVERS_LOAD_FAILED");
+    await expect(store.loadServers()).resolves.toBeUndefined();
 
     expect(store.items).toEqual([]);
-    expect(store.isLoading).toBe(false);
+    expect(store.errorMessage).toBe("Не удалось загрузить список серверов.");
     expect(store.isLoaded).toBe(true);
-    expect(store.errorMessage).toBe("SERVERS_LOAD_FAILED");
+    expect(store.loadedForSessionToken).toBeNull();
   });
 });
-
-/**
- * Создает минимальный GraphQL Response-объект для клиентских тестов списка серверов.
- */
-function createGraphqlResponse(payload: unknown): Response {
-  return new Response(JSON.stringify(payload), {
-    status: 200,
-    headers: {
-      "content-type": "application/json",
-    },
-  });
-}

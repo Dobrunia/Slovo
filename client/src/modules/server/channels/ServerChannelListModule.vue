@@ -118,7 +118,6 @@ function handleSelectChannel(channelId: string): void {
 
     <ServerSettingsModal
       :is-open="isServerSettingsOpen"
-      :server="selectedServer"
       @close="closeServerSettings"
     />
   </aside>
@@ -139,7 +138,7 @@ function handleSelectChannel(channelId: string): void {
   align-items: center;
   justify-content: space-between;
   gap: var(--dbru-space-3);
-  padding: var(--dbru-space-4);
+  padding: var(--dbru-space-4) var(--dbru-space-5);
   border-bottom: var(--dbru-border-size-1) solid var(--dbru-color-border);
 }
 

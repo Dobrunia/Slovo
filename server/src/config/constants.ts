@@ -25,6 +25,11 @@ export const SERVER_NAME_MAX_LENGTH = 191;
  */
 export const SERVER_AVATAR_URL_MAX_LENGTH = 2048;
 
+/**
+ * Размер сырого invite token сервера в байтах до кодирования.
+ */
+export const SERVER_INVITE_TOKEN_BYTES = 16;
+
 // Runtime defaults
 
 /**
@@ -51,6 +56,11 @@ export const DEFAULT_GRAPHQL_PATH = "/graphql";
  * Стандартный origin клиента.
  */
 export const DEFAULT_CLIENT_ORIGIN = "http://localhost:5173";
+
+/**
+ * Стандартный path-префикс клиентских invite-ссылок сервера.
+ */
+export const DEFAULT_SERVER_INVITE_PATHNAME = "/invite/";
 
 /**
  * Стандартное имя серверного сервиса в health-ответах и runtime-логах.

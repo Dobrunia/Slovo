@@ -1,11 +1,9 @@
-import { z } from "zod";
-import { query } from "strictql";
-import { authenticatedPolicy } from "../../auth/policies.js";
-import {
-  publicServerListItemSchema,
-  toPublicServerListItem,
-} from "../../server/public-server.js";
-import type { GraphqlContext } from "../context.js";
+import { z } from 'zod';
+import { query } from 'strictql';
+import { authenticatedPolicy } from '../../auth/policies.js';
+import { requireCurrentUser } from '../../auth/require.js';
+import { publicServerListItemSchema, toPublicServerListItem } from '../../server/public-server.js';
+import type { GraphqlContext } from '../context.js';
 
 const myServersQueryInputSchema = z.object({
   marker: z.string().optional(),
@@ -15,24 +13,17 @@ const myServersQueryInputSchema = z.object({
  * Приватный GraphQL-query, возвращающий список серверов текущего пользователя.
  */
 export const myServersQuery = query({
-  name: "myServers",
+  name: 'myServers',
   policy: authenticatedPolicy,
   input: myServersQueryInputSchema,
   output: z.array(publicServerListItemSchema),
-  resolve: async ({
-    ctx,
-  }: {
-    ctx: unknown;
-  }) => {
+  resolve: async ({ ctx }: { ctx: unknown }) => {
     const graphqlContext = ctx as GraphqlContext;
-
-    if (!graphqlContext.userId) {
-      throw new Error("Требуется авторизация.");
-    }
+    const userId = requireCurrentUser(graphqlContext);
 
     const memberships = await graphqlContext.dataLayer.prisma.serverMember.findMany({
       where: {
-        userId: graphqlContext.userId,
+        userId,
       },
       include: {
         server: true,
@@ -54,7 +45,7 @@ export const myServersQuery = query({
           avatarUrl: membership.server!.avatarUrl,
           isPublic: membership.server!.isPublic,
           role: membership.role,
-        }),
+        })
       );
   },
 });

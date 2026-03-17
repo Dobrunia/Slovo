@@ -1,12 +1,12 @@
-import { z } from "zod";
-import { publicPolicy, query } from "strictql";
+import { z } from 'zod';
+import { publicPolicy, query } from 'strictql';
 import {
   DEFAULT_GRAPHQL_PATH,
   DEFAULT_SERVER_SERVICE_NAME,
   MAX_CHANNELS_PER_SERVER,
   MAX_SERVERS_PER_OWNER,
-} from "../../config/constants.js";
-import type { GraphqlContext } from "../context.js";
+} from '../../config/constants.js';
+import type { GraphqlContext } from '../context.js';
 
 const healthQueryInputSchema = z.object({
   probe: z.string().min(1),
@@ -26,18 +26,18 @@ const healthQueryOutputSchema = z.object({
  * Базовый публичный query для проверки доступности GraphQL foundation.
  */
 export const healthQuery = query({
-  name: "health",
+  name: 'health',
   policy: publicPolicy,
   input: healthQueryInputSchema,
   output: healthQueryOutputSchema,
   resolve: ({ ctx }: { ctx: unknown }) => {
     void (ctx as GraphqlContext);
-    const graphqlPath = process.env.GRAPHQL_PATH?.trim()?.startsWith("/")
+    const graphqlPath = process.env.GRAPHQL_PATH?.trim()?.startsWith('/')
       ? process.env.GRAPHQL_PATH.trim()
       : DEFAULT_GRAPHQL_PATH;
 
     return {
-      status: "ok",
+      status: 'ok',
       service: DEFAULT_SERVER_SERVICE_NAME,
       graphqlPath,
       limits: {

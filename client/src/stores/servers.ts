@@ -45,10 +45,9 @@ export const useServersStore = defineStore("servers", () => {
       isLoaded.value = true;
     } catch (error) {
       items.value = [];
-      errorMessage.value = toErrorMessage(error);
+      errorMessage.value = toLoadServersErrorMessage(error);
       loadedForSessionToken.value = null;
       isLoaded.value = true;
-      throw error;
     } finally {
       isLoading.value = false;
     }
@@ -133,14 +132,21 @@ export const useServersStore = defineStore("servers", () => {
 });
 
 /**
- * Приводит неизвестную ошибку к читаемому сообщению.
+ * Возвращает безопасное пользовательское сообщение для загрузки списка серверов.
  */
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
+function toLoadServersErrorMessage(error: unknown): string {
+  if (error instanceof Error && isKnownLoadServersErrorMessage(error.message)) {
     return error.message;
   }
 
   return "Не удалось загрузить список серверов.";
+}
+
+/**
+ * Определяет, можно ли безопасно показать текст ошибки пользователю без утечки внутренних деталей.
+ */
+function isKnownLoadServersErrorMessage(message: string): boolean {
+  return message === "Требуется авторизация.";
 }
 
 /**

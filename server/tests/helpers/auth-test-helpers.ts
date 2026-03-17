@@ -31,6 +31,7 @@ export type StoredTestServer = {
   id: string;
   name: string;
   avatarUrl: string | null;
+  inviteToken?: string | null;
   isPublic: boolean;
   ownerId: string;
   createdAt: Date;
@@ -62,6 +63,17 @@ export type StoredTestVoiceChannel = {
 };
 
 /**
+ * Упрощенная запись бана сервера для GraphQL-тестов без реальной БД.
+ */
+export type StoredTestServerBan = {
+  id: string;
+  serverId: string;
+  userId: string;
+  bannedByUserId: string;
+  createdAt: Date;
+};
+
+/**
  * Создает минимальный in-memory data layer, достаточный для auth GraphQL-тестов.
  */
 export function createAuthTestDataLayer() {
@@ -70,6 +82,7 @@ export function createAuthTestDataLayer() {
   const servers: StoredTestServer[] = [];
   const serverMembers: StoredTestServerMember[] = [];
   const voiceChannels: StoredTestVoiceChannel[] = [];
+  const serverBans: StoredTestServerBan[] = [];
 
   const dataLayer = {
     prisma: {
@@ -193,6 +206,7 @@ export function createAuthTestDataLayer() {
           data: {
             name: string;
             avatarUrl?: string | null;
+            inviteToken?: string | null;
             isPublic?: boolean;
             ownerId: string;
           };
@@ -202,6 +216,7 @@ export function createAuthTestDataLayer() {
             id: `server-${servers.length + 1}`,
             name: args.data.name,
             avatarUrl: args.data.avatarUrl ?? null,
+            inviteToken: args.data.inviteToken ?? null,
             isPublic: args.data.isPublic ?? false,
             ownerId: args.data.ownerId,
             createdAt: now,
@@ -209,6 +224,78 @@ export function createAuthTestDataLayer() {
           };
 
           servers.push(server);
+
+          return server;
+        },
+        findUnique: async (args: {
+          where: {
+            id?: string;
+            inviteToken?: string;
+          };
+        }) =>
+          servers.find(
+            (server) =>
+              (args.where.id !== undefined && server.id === args.where.id) ||
+              (args.where.inviteToken !== undefined && server.inviteToken === args.where.inviteToken),
+          ) ?? null,
+        findMany: async (args?: {
+          where?: {
+            isPublic?: boolean;
+          };
+          orderBy?: {
+            updatedAt?: "asc" | "desc";
+          };
+        }) => {
+          const filteredServers = servers.filter(
+            (server) => args?.where?.isPublic === undefined || server.isPublic === args.where.isPublic,
+          );
+
+          const updatedAtOrder = args?.orderBy?.updatedAt;
+
+          if (updatedAtOrder) {
+            filteredServers.sort((left, right) =>
+              updatedAtOrder === "desc"
+                ? right.updatedAt.getTime() - left.updatedAt.getTime()
+                : left.updatedAt.getTime() - right.updatedAt.getTime(),
+            );
+          }
+
+          return filteredServers;
+        },
+        update: async (args: {
+          where: {
+            id: string;
+          };
+          data: {
+            inviteToken?: string | null;
+            name?: string;
+            avatarUrl?: string | null;
+            isPublic?: boolean;
+          };
+        }) => {
+          const server = servers.find((storedServer) => storedServer.id === args.where.id);
+
+          if (!server) {
+            throw new Error("Server not found");
+          }
+
+          if (args.data.inviteToken !== undefined) {
+            server.inviteToken = args.data.inviteToken;
+          }
+
+          if (args.data.name !== undefined) {
+            server.name = args.data.name;
+          }
+
+          if (args.data.avatarUrl !== undefined) {
+            server.avatarUrl = args.data.avatarUrl;
+          }
+
+          if (args.data.isPublic !== undefined) {
+            server.isPublic = args.data.isPublic;
+          }
+
+          server.updatedAt = new Date();
 
           return server;
         },
@@ -328,6 +415,40 @@ export function createAuthTestDataLayer() {
           return channels;
         },
       },
+      serverBan: {
+        create: async (args: {
+          data: {
+            serverId: string;
+            userId: string;
+            bannedByUserId: string;
+          };
+        }) => {
+          const serverBan: StoredTestServerBan = {
+            id: `ban-${serverBans.length + 1}`,
+            serverId: args.data.serverId,
+            userId: args.data.userId,
+            bannedByUserId: args.data.bannedByUserId,
+            createdAt: new Date(),
+          };
+
+          serverBans.push(serverBan);
+
+          return serverBan;
+        },
+        findUnique: async (args: {
+          where: {
+            serverId_userId: {
+              serverId: string;
+              userId: string;
+            };
+          };
+        }) =>
+          serverBans.find(
+            (serverBan) =>
+              serverBan.serverId === args.where.serverId_userId.serverId &&
+              serverBan.userId === args.where.serverId_userId.userId,
+          ) ?? null,
+      },
       $disconnect: async () => undefined,
     },
   } as unknown as DataLayer;
@@ -339,5 +460,6 @@ export function createAuthTestDataLayer() {
     servers,
     serverMembers,
     voiceChannels,
+    serverBans,
   };
 }

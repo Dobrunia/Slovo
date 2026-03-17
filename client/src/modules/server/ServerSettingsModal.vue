@@ -1,154 +1,164 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { DbrAvatar, DbrButton, DbrInput } from "dobruniaui-vue";
-import AppModalLayout from "../../components/base/AppModalLayout.vue";
 import AppIconButton from "../../components/base/AppIconButton.vue";
-import copyIcon from "../../assets/icons/copy.svg";
+import AppModalLayout from "../../components/base/AppModalLayout.vue";
+import { useServerModuleStore } from "../../stores/serverModule";
+import type { ServerMembershipRole } from "../../types/server";
 import checkIcon from "../../assets/icons/check.svg";
+import copyIcon from "../../assets/icons/copy.svg";
 import refreshIcon from "../../assets/icons/refresh.svg";
-import type { ClientServerListItem } from "../../types/server";
 
-interface ServerSettingsModalProps {
+const props = defineProps<{
   isOpen: boolean;
-  server: ClientServerListItem | null;
-}
-
-const props = defineProps<ServerSettingsModalProps>();
+}>();
 
 const emit = defineEmits<{
   close: [];
 }>();
 
-const draftServerName = ref("");
+const serverModuleStore = useServerModuleStore();
+const draftName = ref("");
 const draftAvatarUrl = ref("");
 const draftInviteLink = ref("");
-const isCopySuccess = ref(false);
+const isCopySucceeded = ref(false);
 const isRegeneratingInviteLink = ref(false);
-let copySuccessTimeoutId: number | null = null;
+const copyResetTimeoutId = ref<number | null>(null);
+const regenerateTimeoutId = ref<number | null>(null);
 
-/**
- * Возвращает отображаемое имя сервера для превью модального окна.
- */
-const previewServerName = computed(() => {
-  const normalizedValue = draftServerName.value.trim();
-  return normalizedValue.length > 0 ? normalizedValue : props.server?.name ?? "Сервер";
+const currentServer = computed(() => serverModuleStore.snapshot?.server ?? null);
+const previewName = computed(() => {
+  const normalizedValue = draftName.value.trim();
+  return normalizedValue.length > 0 ? normalizedValue : currentServer.value?.name ?? "Сервер";
 });
-
-/**
- * Возвращает отображаемый avatar URL для превью модального окна.
- */
 const previewAvatarUrl = computed(() => {
-  const normalizedValue = draftAvatarUrl.value.trim();
-  return normalizedValue.length > 0 ? normalizedValue : props.server?.avatarUrl ?? undefined;
+  const normalizedValue = normalizeOptionalText(draftAvatarUrl.value);
+  return normalizedValue ?? currentServer.value?.avatarUrl ?? undefined;
 });
+const canManageServer = computed(() =>
+  isManagerRole(currentServer.value?.role),
+);
 
 watch(
   () => props.isOpen,
   (isOpen) => {
-    if (!isOpen) {
-      clearCopySuccessState();
-      isRegeneratingInviteLink.value = false;
-      return;
+    if (isOpen) {
+      syncDraftWithCurrentServer();
     }
-
-    syncDraftWithServer();
   },
-  {
-    immediate: true,
-  },
+  { immediate: true },
 );
 
+watch(currentServer, () => {
+  if (props.isOpen) {
+    syncDraftWithCurrentServer();
+  }
+});
+
 onBeforeUnmount(() => {
-  clearCopySuccessState();
+  clearScheduledStateReset(copyResetTimeoutId.value);
+  clearScheduledStateReset(regenerateTimeoutId.value);
 });
 
 /**
- * Синхронизирует локальные поля формы с выбранным сервером.
+ * Синхронизирует черновики модального окна с текущим выбранным сервером.
  */
-function syncDraftWithServer(): void {
-  draftServerName.value = props.server?.name ?? "";
-  draftAvatarUrl.value = props.server?.avatarUrl ?? "";
-  draftInviteLink.value = createInviteLinkPlaceholder(props.server);
-  isRegeneratingInviteLink.value = false;
-  clearCopySuccessState();
+function syncDraftWithCurrentServer(): void {
+  draftName.value = currentServer.value?.name ?? "";
+  draftAvatarUrl.value = currentServer.value?.avatarUrl ?? "";
+  draftInviteLink.value = buildPlaceholderInviteLink(currentServer.value?.id ?? "server");
+  isCopySucceeded.value = false;
 }
 
 /**
- * Генерирует новое локальное placeholder-значение пригласительной ссылки
- * и крутит иконку до завершения операции, как это будет работать с реальным API позже.
+ * Копирует текущую пригласительную ссылку и временно показывает успешное состояние кнопки.
  */
-async function regenerateInviteLink(): Promise<void> {
-  if (isRegeneratingInviteLink.value) {
+async function handleCopyInviteLink(): Promise<void> {
+  if (!draftInviteLink.value) {
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(draftInviteLink.value);
+    isCopySucceeded.value = true;
+    clearScheduledStateReset(copyResetTimeoutId.value);
+    copyResetTimeoutId.value = window.setTimeout(() => {
+      isCopySucceeded.value = false;
+      copyResetTimeoutId.value = null;
+    }, 1600);
+  } catch {
+    isCopySucceeded.value = false;
+  }
+}
+
+/**
+ * Имитирует локальную перегенерацию invite link без серверной логики.
+ */
+async function handleRegenerateInviteLink(): Promise<void> {
+  if (!canManageServer.value || isRegeneratingInviteLink.value) {
     return;
   }
 
   isRegeneratingInviteLink.value = true;
-  clearCopySuccessState();
+  clearScheduledStateReset(regenerateTimeoutId.value);
 
-  try {
-    await wait(960);
-    draftInviteLink.value = createInviteLinkPlaceholder(props.server);
-  } finally {
-    isRegeneratingInviteLink.value = false;
-  }
-}
-
-/**
- * Копирует текущую пригласительную ссылку в буфер обмена, если API доступен,
- * и переводит кнопку в success-состояние для визуальной обратной связи.
- */
-async function copyInviteLink(): Promise<void> {
-  try {
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(draftInviteLink.value);
-    }
-  } catch {
-    // UI-заглушка не должна падать из-за недоступного clipboard API.
-  }
-
-  setCopySuccessState();
-}
-
-/**
- * Переводит кнопку копирования во временное success-состояние.
- */
-function setCopySuccessState(): void {
-  clearCopySuccessState();
-  isCopySuccess.value = true;
-  copySuccessTimeoutId = window.setTimeout(() => {
-    isCopySuccess.value = false;
-    copySuccessTimeoutId = null;
-  }, 1600);
-}
-
-/**
- * Сбрасывает success-состояние кнопки копирования и очищает таймер.
- */
-function clearCopySuccessState(): void {
-  isCopySuccess.value = false;
-
-  if (copySuccessTimeoutId !== null) {
-    window.clearTimeout(copySuccessTimeoutId);
-    copySuccessTimeoutId = null;
-  }
-}
-
-/**
- * Создает локальную placeholder-ссылку приглашения для визуального состояния формы.
- */
-function createInviteLinkPlaceholder(server: ClientServerListItem | null): string {
-  const serverKey = server?.id ?? "slovo";
-  const suffix = Math.random().toString(36).slice(2, 10);
-  return `https://slovo.app/invite/${serverKey}-${suffix}`;
-}
-
-/**
- * Создает асинхронную задержку для имитации будущей серверной перегенерации.
- */
-function wait(durationMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, durationMs);
+  await new Promise<void>((resolve) => {
+    regenerateTimeoutId.value = window.setTimeout(() => {
+      draftInviteLink.value = buildPlaceholderInviteLink(currentServer.value?.id ?? "server");
+      isRegeneratingInviteLink.value = false;
+      regenerateTimeoutId.value = null;
+      resolve();
+    }, 900);
   });
+}
+
+/**
+ * Закрывает модальное окно.
+ */
+function closeModal(): void {
+  emit("close");
+}
+
+/**
+ * Оставляет заглушку сохранения до серверной реализации.
+ */
+function handleSave(): void {
+  // Серверная логика редактирования сервера будет добавлена позже.
+}
+
+/**
+ * Нормализует необязательный текстовый ввод.
+ */
+function normalizeOptionalText(value: string): string | null {
+  const normalizedValue = value.trim();
+  return normalizedValue.length > 0 ? normalizedValue : null;
+}
+
+/**
+ * Определяет, есть ли у участника права управления сервером.
+ */
+function isManagerRole(role: ServerMembershipRole | null | undefined): boolean {
+  return role === "OWNER" || role === "ADMIN";
+}
+
+/**
+ * Создает локальную placeholder-пригласительную ссылку для визуального сценария.
+ */
+function buildPlaceholderInviteLink(serverId: string): string {
+  const invitePart = `${serverId.replace(/[^a-zA-Z0-9]/g, "").slice(-8)}${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+
+  return `https://slovo.local/invite/${invitePart}`;
+}
+
+/**
+ * Сбрасывает ранее запланированный таймер локального UI-состояния.
+ */
+function clearScheduledStateReset(timeoutId: number | null): void {
+  if (timeoutId !== null) {
+    window.clearTimeout(timeoutId);
+  }
 }
 </script>
 
@@ -156,29 +166,29 @@ function wait(durationMs: number): Promise<void> {
   <AppModalLayout
     :is-open="isOpen"
     title="Настройки сервера"
-    @close="emit('close')"
+    @close="closeModal"
   >
     <section class="server-settings-modal__profile">
       <DbrAvatar
         size="lg"
         shape="rounded"
-        :name="previewServerName"
+        :name="previewName"
         :src="previewAvatarUrl"
       />
 
-      <div class="server-settings-modal__info">
-        <h3 class="server-settings-modal__name dbru-text-base dbru-text-main">
-          {{ previewServerName }}
+      <div class="server-settings-modal__profile-text">
+        <h3 class="dbru-text-base dbru-text-main server-settings-modal__title">
+          {{ previewName }}
         </h3>
-        <p class="server-settings-modal__copy dbru-text-sm dbru-text-muted">
-          Здесь позже появится серверная логика сохранения.
+        <p class="dbru-text-sm dbru-text-muted server-settings-modal__meta">
+          Редактирование сервера
         </p>
       </div>
     </section>
 
     <section class="server-settings-modal__form">
       <DbrInput
-        v-model="draftServerName"
+        v-model="draftName"
         label="Название сервера"
         name="server-name"
         autocomplete="organization"
@@ -191,42 +201,41 @@ function wait(durationMs: number): Promise<void> {
         autocomplete="url"
       />
 
-      <div class="server-settings-modal__invite">
+      <div class="server-settings-modal__invite-block">
         <div class="server-settings-modal__invite-row">
-          <div class="server-settings-modal__invite-input">
+          <div class="server-settings-modal__invite-input-wrap">
             <DbrInput
-              v-model="draftInviteLink"
+              :model-value="draftInviteLink"
               label="Пригласительная ссылка"
-              name="invite-link"
-              autocomplete="off"
+              name="server-invite-link"
+              disabled
             />
           </div>
 
           <AppIconButton
-            :icon-src="isCopySuccess ? checkIcon : copyIcon"
-            :tone="isCopySuccess ? 'success' : 'default'"
-            :label="isCopySuccess ? 'Ссылка скопирована' : 'Скопировать ссылку'"
-            icon-alt=""
-            @click="copyInviteLink"
+            :icon-src="isCopySucceeded ? checkIcon : copyIcon"
+            :tone="isCopySucceeded ? 'success' : 'default'"
+            label="Скопировать пригласительную ссылку"
+            @click="handleCopyInviteLink"
           />
         </div>
 
         <div class="server-settings-modal__invite-actions">
           <AppIconButton
+            v-if="canManageServer"
             :icon-src="refreshIcon"
             :spinning="isRegeneratingInviteLink"
-            label="Перегенерировать ссылку"
-            icon-alt=""
-            @click="regenerateInviteLink"
+            label="Перегенерировать пригласительную ссылку"
+            @click="handleRegenerateInviteLink"
           >
-            <span class="dbru-text-sm dbru-text-main">Перегенерировать</span>
+            Перегенерировать
           </AppIconButton>
         </div>
       </div>
     </section>
 
     <footer class="server-settings-modal__footer">
-      <DbrButton disabled>Сохранить</DbrButton>
+      <DbrButton disabled @click="handleSave">Сохранить</DbrButton>
     </footer>
   </AppModalLayout>
 </template>
@@ -238,23 +247,23 @@ function wait(durationMs: number): Promise<void> {
   gap: var(--dbru-space-4);
 }
 
-.server-settings-modal__info {
+.server-settings-modal__profile-text {
   display: grid;
   gap: var(--dbru-space-2);
   min-width: 0;
 }
 
-.server-settings-modal__name,
-.server-settings-modal__copy {
+.server-settings-modal__title,
+.server-settings-modal__meta {
   margin: 0;
 }
 
 .server-settings-modal__form {
   display: grid;
-  gap: var(--dbru-space-4);
+  gap: var(--dbru-space-3);
 }
 
-.server-settings-modal__invite {
+.server-settings-modal__invite-block {
   display: grid;
   gap: var(--dbru-space-3);
 }
@@ -262,17 +271,17 @@ function wait(durationMs: number): Promise<void> {
 .server-settings-modal__invite-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
   gap: var(--dbru-space-3);
+  align-items: center;
 }
 
-.server-settings-modal__invite-input {
+.server-settings-modal__invite-input-wrap {
   min-width: 0;
 }
 
 .server-settings-modal__invite-actions {
   display: flex;
-  justify-content: flex-start;
+  align-items: center;
 }
 
 .server-settings-modal__footer {
@@ -287,14 +296,9 @@ function wait(durationMs: number): Promise<void> {
 
   .server-settings-modal__invite-row {
     grid-template-columns: minmax(0, 1fr);
-    align-items: stretch;
   }
 
-  .server-settings-modal__footer {
-    justify-content: stretch;
-  }
-
-  .server-settings-modal__footer :deep(.dbru-btn) {
+  .server-settings-modal__footer :deep(.dbru-button) {
     width: 100%;
   }
 }

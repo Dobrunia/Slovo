@@ -1,12 +1,14 @@
-import { z } from "zod";
-import { query } from "strictql";
-import { authenticatedPolicy } from "../../auth/policies.js";
+import { z } from 'zod';
+import { query } from 'strictql';
+import { authenticatedPolicy } from '../../auth/policies.js';
+import { requireCurrentUser } from '../../auth/require.js';
+import { requireServerMember } from '../../server/access.js';
 import {
   publicServerSnapshotSchema,
   toPublicServerListItem,
   toPublicVoiceChannel,
-} from "../../server/public-server.js";
-import type { GraphqlContext } from "../context.js";
+} from '../../server/public-server.js';
+import type { GraphqlContext } from '../context.js';
 
 const serverSnapshotInputSchema = z.object({
   serverId: z.string().min(1),
@@ -16,7 +18,7 @@ const serverSnapshotInputSchema = z.object({
  * Приватный GraphQL-query initial snapshot выбранного сервера.
  */
 export const serverSnapshotQuery = query({
-  name: "serverSnapshot",
+  name: 'serverSnapshot',
   policy: authenticatedPolicy,
   input: serverSnapshotInputSchema,
   output: publicServerSnapshotSchema,
@@ -28,50 +30,37 @@ export const serverSnapshotQuery = query({
     ctx: unknown;
   }) => {
     const graphqlContext = ctx as GraphqlContext;
+    const userId = requireCurrentUser(graphqlContext);
 
-    if (!graphqlContext.userId) {
-      throw new Error("Требуется авторизация.");
-    }
-
-    const membership = await graphqlContext.dataLayer.prisma.serverMember.findUnique({
-      where: {
-        serverId_userId: {
-          serverId: input.serverId,
-          userId: graphqlContext.userId,
-        },
-      },
-      include: {
-        server: true,
-      },
+    const readableMembership = await requireServerMember({
+      dataLayer: graphqlContext.dataLayer,
+      serverId: input.serverId,
+      userId,
     });
-
-    if (!membership?.server) {
-      throw new Error("Сервер недоступен.");
-    }
 
     const channels = await graphqlContext.dataLayer.prisma.voiceChannel.findMany({
       where: {
         serverId: input.serverId,
       },
       orderBy: {
-        sortOrder: "asc",
+        sortOrder: 'asc',
       },
     });
 
     return {
       server: toPublicServerListItem({
-        id: membership.server.id,
-        name: membership.server.name,
-        avatarUrl: membership.server.avatarUrl,
-        isPublic: membership.server.isPublic,
-        role: membership.role,
+        id: readableMembership.server.id,
+        name: readableMembership.server.name,
+        avatarUrl: readableMembership.server.avatarUrl,
+        isPublic: readableMembership.server.isPublic,
+        role: readableMembership.role,
       }),
       channels: channels.map((channel) =>
         toPublicVoiceChannel({
           id: channel.id,
           name: channel.name,
           sortOrder: channel.sortOrder,
-        }),
+        })
       ),
     };
   },

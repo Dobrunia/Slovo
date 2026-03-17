@@ -77,7 +77,7 @@ export const realtimeEvents = [
     payload: z.object({
       userId: z.string().min(1),
       serverId: z.string().min(1),
-      action: z.literal("created"),
+      action: z.enum(["created", "joined"]),
       occurredAt: z.string().min(1),
     }),
   }),
