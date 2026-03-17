@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import megaphoneIcon from "../../../assets/icons/megaphone.svg";
+import megaphoneIconRaw from '../../../assets/icons/megaphone.svg?raw';
 
 defineProps<{
   channelId: string;
@@ -10,19 +10,25 @@ defineProps<{
 const emit = defineEmits<{
   select: [channelId: string];
 }>();
+
+/**
+ * Нормализованный SVG канала с привязкой цвета к currentColor.
+ */
+const megaphoneIconMarkup = megaphoneIconRaw
+  .replace(/fill="(?!none)[^"]*"/g, 'fill="currentColor"')
+  .replace(/stroke="(?!none)[^"]*"/g, 'stroke="currentColor"');
 </script>
 
 <template>
   <button
     type="button"
     class="server-channel-list-item"
+    :class="{
+      'server-channel-list-item--selected': isSelected,
+    }"
     @click="emit('select', channelId)"
   >
-    <img
-      class="server-channel-list-item__icon"
-      :src="megaphoneIcon"
-      alt=""
-    >
+    <span class="server-channel-list-item__icon" aria-hidden="true" v-html="megaphoneIconMarkup" />
 
     <span class="server-channel-list-item__name dbru-text-base dbru-text-main">
       {{ name }}
@@ -49,13 +55,29 @@ const emit = defineEmits<{
 }
 
 .server-channel-list-item:hover {
-  background: color-mix(in srgb, #000000 12%, transparent); /* НЕ МЕНЯТЬ!! */
+  background-color: color-mix(in srgb, var(--dbru-color-primary) 12%, transparent);
+}
+
+.server-channel-list-item--selected,
+.server-channel-list-item--selected:hover {
+  background: transparent;
 }
 
 .server-channel-list-item__icon {
   flex: 0 0 auto;
   width: 1rem;
   height: 1rem;
+  color: var(--dbru-color-text);
+}
+
+.server-channel-list-item__icon :deep(svg) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.server-channel-list-item--selected .server-channel-list-item__icon {
+  color: var(--dbru-color-success);
 }
 
 .server-channel-list-item__name {
