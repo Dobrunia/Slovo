@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue';
-import { DbrButton, DbrCard, DbrInput } from 'dobruniaui-vue';
-import xIcon from '../../assets/icons/x.svg';
-import AppIconButton from '../../components/base/AppIconButton.vue';
-import AppHeadingBlock from '../../components/base/AppHeadingBlock.vue';
+import { DbrButton, DbrInput } from 'dobruniaui-vue';
+import AppModalLayout from '../../components/base/AppModalLayout.vue';
 import { useServersStore } from '../../stores/servers';
 
 const props = defineProps<{
@@ -52,63 +50,34 @@ async function handleSubmit(): Promise<void> {
 </script>
 
 <template>
-  <Teleport to="body">
-    <transition name="create-server-modal">
-      <div v-if="isOpen" class="create-server-modal" @click.self="emit('close')">
-        <DbrCard>
-          <form class="create-server-modal__form" @submit.prevent="handleSubmit">
-            <header class="create-server-modal__header">
-              <AppHeadingBlock title="Создать сервер" />
+  <AppModalLayout
+    :is-open="isOpen"
+    title="Создать сервер"
+    @close="emit('close')"
+  >
+    <form class="create-server-modal__form" @submit.prevent="handleSubmit">
+      <DbrInput v-model="form.name" label="Название сервера" required />
 
-              <AppIconButton
-                :icon-src="xIcon"
-                label="Закрыть окно создания сервера"
-                icon-alt=""
-                @click="emit('close')"
-              />
-            </header>
-            <DbrInput v-model="form.name" label="Название сервера" required />
+      <p v-if="errorMessage" class="create-server-modal__error dbru-text-sm">
+        {{ errorMessage }}
+      </p>
 
-            <p v-if="errorMessage" class="create-server-modal__error dbru-text-sm">
-              {{ errorMessage }}
-            </p>
-
-            <DbrButton
-              :disabled="serversStore.isCreating || !form.name.trim()"
-              :native-type="'submit'"
-            >
-              {{ submitLabel }}
-            </DbrButton>
-          </form>
-        </DbrCard>
-      </div>
-    </transition>
-  </Teleport>
+      <DbrButton
+        :disabled="serversStore.isCreating || !form.name.trim()"
+        :native-type="'submit'"
+      >
+        {{ submitLabel }}
+      </DbrButton>
+    </form>
+  </AppModalLayout>
 </template>
 
 <style scoped>
-.create-server-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(12px);
-}
-
 .create-server-modal__form {
-  width: 600px;
-  padding: var(--dbru-space-4);
-  display: flex;
-  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  display: grid;
   gap: var(--dbru-space-4);
-}
-
-.create-server-modal__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .create-server-modal__error {

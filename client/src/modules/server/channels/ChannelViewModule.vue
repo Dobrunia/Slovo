@@ -63,7 +63,11 @@ const selectedChannel = computed(() =>
   height: 100%;
   min-height: 0;
   background-color: var(--dbru-color-bg);
-  background-image: url("../../../assets/global_back.png");
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--dbru-color-bg) 50%, transparent)
+    ),
+    url("../../../assets/global_back.png");
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
