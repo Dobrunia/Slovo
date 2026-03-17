@@ -6,6 +6,9 @@ import {
 import type {
   ClientCreateServerInput,
   ClientCreateServerResult,
+  ClientJoinServerInput,
+  ClientJoinServerResult,
+  ClientPublicServerDiscoveryItem,
   ClientServerListItem,
 } from "../types/server";
 
@@ -49,6 +52,14 @@ export interface CreateServersApiClientOptions {
  */
 export interface ServersApiClient {
   myServers(sessionToken: string): Promise<ClientServerListItem[]>;
+  searchPublicServers(
+    sessionToken: string,
+    query: string,
+  ): Promise<ClientPublicServerDiscoveryItem[]>;
+  joinServer(
+    sessionToken: string,
+    input: ClientJoinServerInput,
+  ): Promise<ClientJoinServerResult>;
   createServer(
     sessionToken: string,
     input: ClientCreateServerInput,
@@ -105,6 +116,24 @@ export function createServersApiClient(
       return data.myServers;
     },
 
+    async searchPublicServers(sessionToken, query) {
+      const data = await request<{ searchPublicServers: ClientPublicServerDiscoveryItem[] }>(
+        buildSearchPublicServersQuery(query),
+        sessionToken,
+      );
+
+      return data.searchPublicServers;
+    },
+
+    async joinServer(sessionToken, input) {
+      const data = await request<{ joinServer: ClientJoinServerResult }>(
+        buildJoinServerMutation(input),
+        sessionToken,
+      );
+
+      return data.joinServer;
+    },
+
     async createServer(sessionToken, input) {
       const data = await request<{ createServer: ClientCreateServerResult }>(
         buildCreateServerMutation(input),
@@ -133,6 +162,65 @@ function buildCreateServerMutation(input: ClientCreateServerInput): string {
       }
     }
   `;
+}
+
+/**
+ * Строит GraphQL-query поиска публичных серверов.
+ */
+function buildSearchPublicServersQuery(query: string): string {
+  return `
+    query {
+      searchPublicServers(
+        input: {
+          query: ${toGraphqlString(query)}
+        }
+      ) {
+        id
+        name
+        avatarUrl
+        isPublic
+      }
+    }
+  `;
+}
+
+/**
+ * Строит GraphQL-мутацию вступления в сервер по `serverId` или `inviteToken`.
+ */
+function buildJoinServerMutation(input: ClientJoinServerInput): string {
+  if (input.serverId) {
+    return `
+      mutation {
+        joinServer(
+          input: {
+            serverId: ${toGraphqlString(input.serverId)}
+          }
+        ) {
+          server {
+            ${SERVER_FIELDS}
+          }
+        }
+      }
+    `;
+  }
+
+  if (input.inviteToken) {
+    return `
+      mutation {
+        joinServer(
+          input: {
+            inviteToken: ${toGraphqlString(input.inviteToken)}
+          }
+        ) {
+          server {
+            ${SERVER_FIELDS}
+          }
+        }
+      }
+    `;
+  }
+
+  throw new Error("Нужно передать либо serverId, либо inviteToken.");
 }
 
 /**

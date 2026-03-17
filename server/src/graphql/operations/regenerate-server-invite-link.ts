@@ -3,7 +3,7 @@ import { mutation } from 'strictql';
 import { authenticatedPolicy } from '../../auth/policies.js';
 import { requireCurrentUser } from '../../auth/require.js';
 import { REALTIME_EVENT_NAMES } from '../../../../shared/realtime/names.js';
-import { requireServerManager } from '../../server/access.js';
+import { requireServerOwner } from '../../server/access.js';
 import {
   publicServerInviteLinkSchema,
   toPublicServerInviteLink,
@@ -16,7 +16,7 @@ const regenerateServerInviteLinkInputSchema = z.object({
 });
 
 /**
- * Приватная GraphQL-мутация перевыпуска invite-ссылки сервера для OWNER/ADMIN.
+ * Приватная GraphQL-мутация перевыпуска invite-ссылки сервера только для владельца.
  */
 export const regenerateServerInviteLinkMutation = mutation({
   name: 'regenerateServerInviteLink',
@@ -33,7 +33,7 @@ export const regenerateServerInviteLinkMutation = mutation({
     const graphqlContext = ctx as GraphqlContext;
     const userId = requireCurrentUser(graphqlContext);
 
-    const manageableMembership = await requireServerManager({
+    const manageableMembership = await requireServerOwner({
       dataLayer: graphqlContext.dataLayer,
       serverId: input.serverId,
       userId,

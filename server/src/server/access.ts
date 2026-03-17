@@ -1,7 +1,7 @@
 import type { DataLayer } from "../data/prisma.js";
 
 type ServerMembershipWithServer = {
-  role: "OWNER" | "ADMIN" | "MEMBER";
+  role: "OWNER" | "MEMBER";
   server: {
     id: string;
     name: string;
@@ -36,9 +36,9 @@ async function getServerMembershipWithServer(args: {
 }
 
 /**
- * Проверяет, что пользователь может управлять сервером как OWNER или ADMIN.
+ * Проверяет, что пользователь является единственным владельцем сервера.
  */
-function assertServerManageAccess(
+function assertServerOwnerAccess(
   membership: ServerMembershipWithServer | null,
 ): ServerMembershipWithServer & {
   server: NonNullable<ServerMembershipWithServer["server"]>;
@@ -47,7 +47,7 @@ function assertServerManageAccess(
     throw new Error("Сервер не найден или доступ запрещен.");
   }
 
-  if (membership.role !== "OWNER" && membership.role !== "ADMIN") {
+  if (membership.role !== "OWNER") {
     throw new Error("Недостаточно прав для управления сервером.");
   }
 
@@ -91,10 +91,10 @@ export async function requireServerMember(args: {
 }
 
 /**
- * Возвращает membership текущего пользователя с правом управления конкретным сервером
+ * Возвращает membership текущего пользователя как единственного владельца конкретного сервера
  * или завершает операцию ошибкой доступа.
  */
-export async function requireServerManager(args: {
+export async function requireServerOwner(args: {
   dataLayer: DataLayer;
   serverId: string;
   userId: string;
@@ -104,5 +104,5 @@ export async function requireServerManager(args: {
   }
 > {
   const membership = await getServerMembershipWithServer(args);
-  return assertServerManageAccess(membership);
+  return assertServerOwnerAccess(membership);
 }

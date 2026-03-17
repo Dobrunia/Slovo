@@ -26,6 +26,16 @@ export const SERVER_NAME_MAX_LENGTH = 191;
 export const SERVER_AVATAR_URL_MAX_LENGTH = 2048;
 
 /**
+ * Минимальная длина названия voice-канала.
+ */
+export const VOICE_CHANNEL_NAME_MIN_LENGTH = 1;
+
+/**
+ * Максимальная длина названия voice-канала.
+ */
+export const VOICE_CHANNEL_NAME_MAX_LENGTH = 191;
+
+/**
  * Размер сырого invite token сервера в байтах до кодирования.
  */
 export const SERVER_INVITE_TOKEN_BYTES = 16;
@@ -55,7 +65,7 @@ export const DEFAULT_GRAPHQL_PATH = "/graphql";
 /**
  * Стандартный origin клиента.
  */
-export const DEFAULT_CLIENT_ORIGIN = "http://localhost:5173";
+export const DEFAULT_CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
 
 /**
  * Стандартный path-префикс клиентских invite-ссылок сервера.

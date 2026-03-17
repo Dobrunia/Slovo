@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import ServerDiscoveryModal from "../modules/app/ServerDiscoveryModal.vue";
 import AppHeaderLayout from "../layouts/AppHeaderLayout.vue";
 import AuthenticatedLayout from "../layouts/AuthenticatedLayout.vue";
 import AppHeaderActionsModule from "../modules/app/AppHeaderActionsModule.vue";
@@ -15,6 +16,7 @@ import { APP_HOME_ROUTE_NAME } from "../router/serverRoutes";
 import {
   buildAppServerChannelRoute,
   buildAppServerRoute,
+  readInviteTokenFromRouteParams,
   readSelectedChannelIdFromRouteParams,
   readSelectedServerIdFromRouteParams,
 } from "../router/serverRoutes";
@@ -25,16 +27,24 @@ const route = useRoute();
 const router = useRouter();
 const isSettingsOpen = ref(false);
 const isCreateServerOpen = ref(false);
+const isDiscoveryOpen = ref(false);
+const isJoiningInvite = ref(false);
 const serversStore = useServersStore();
 const serverModuleStore = useServerModuleStore();
 const availableServerIds = computed(() => serversStore.items.map((server) => server.id));
 const selectedServerId = computed(() => readSelectedServerIdFromRouteParams(route.params));
 const selectedChannelId = computed(() => readSelectedChannelIdFromRouteParams(route.params));
+const selectedInviteToken = computed(() => readInviteTokenFromRouteParams(route.params));
 
 watch(
-  [availableServerIds, selectedServerId],
-  ([serverIds, currentSelectedServerId]) => {
-    void syncRouteSelection(serverIds, currentSelectedServerId);
+  [availableServerIds, selectedServerId, selectedInviteToken, isJoiningInvite],
+  ([serverIds, currentSelectedServerId, currentInviteToken, isInviteJoinPending]) => {
+    void syncRouteSelection(
+      serverIds,
+      currentSelectedServerId,
+      currentInviteToken,
+      isInviteJoinPending,
+    );
   },
   {
     immediate: true,
@@ -55,6 +65,20 @@ watch(
     if (!hasSelectedChannel) {
       void router.replace(buildAppServerRoute(currentSelectedServerId));
     }
+  },
+);
+
+watch(
+  selectedInviteToken,
+  (inviteToken) => {
+    if (!inviteToken) {
+      return;
+    }
+
+    void handleInviteRoute(inviteToken);
+  },
+  {
+    immediate: true,
   },
 );
 
@@ -80,10 +104,26 @@ function handleAddServer(): void {
 }
 
 /**
+ * Открывает discovery-модалку поиска и вступления в серверы.
+ */
+function handleOpenDiscovery(): void {
+  serversStore.clearDiscoveryState();
+  isDiscoveryOpen.value = true;
+}
+
+/**
  * Закрывает модальное окно создания нового сервера.
  */
 function closeCreateServer(): void {
   isCreateServerOpen.value = false;
+}
+
+/**
+ * Закрывает discovery-модалку и очищает временное состояние flow.
+ */
+function closeDiscovery(): void {
+  isDiscoveryOpen.value = false;
+  serversStore.clearDiscoveryState();
 }
 
 /**
@@ -105,12 +145,52 @@ function handleServerCreated(serverId: string): void {
 }
 
 /**
+ * Закрывает discovery-модалку и открывает сервер, в который пользователь только что вступил.
+ */
+function handleServerJoined(serverId: string): void {
+  closeDiscovery();
+  void router.replace(buildAppServerRoute(serverId));
+}
+
+/**
+ * Обрабатывает прямой переход по invite-ссылке и при ошибке открывает discovery-модалку.
+ */
+async function handleInviteRoute(inviteToken: string): Promise<void> {
+  if (isJoiningInvite.value) {
+    return;
+  }
+
+  isJoiningInvite.value = true;
+  serversStore.clearDiscoveryState();
+
+  try {
+    const joinedServer = await serversStore.joinServer({
+      inviteToken,
+    });
+
+    isDiscoveryOpen.value = false;
+    await router.replace(buildAppServerRoute(joinedServer.id));
+  } catch {
+    isDiscoveryOpen.value = true;
+    await router.replace(APP_HOME_ROUTE_PATH);
+  } finally {
+    isJoiningInvite.value = false;
+  }
+}
+
+/**
  * Синхронизирует route selection и initial load модуля сервера.
  */
 async function syncRouteSelection(
   serverIds: string[],
   currentSelectedServerId: string | null,
+  currentInviteToken: string | null,
+  isInviteJoinPending: boolean,
 ): Promise<void> {
+  if (currentInviteToken || isInviteJoinPending) {
+    return;
+  }
+
   if (serverIds.length === 0) {
     serverModuleStore.reset();
 
@@ -147,6 +227,7 @@ async function syncRouteSelection(
           <template #secondary>
             <AppHeaderActionsModule
               @add-server="handleAddServer"
+              @open-discovery="handleOpenDiscovery"
               @open-settings="toggleSettings"
             />
           </template>
@@ -170,6 +251,11 @@ async function syncRouteSelection(
     </AuthenticatedLayout>
 
     <UserSettingsModal :is-open="isSettingsOpen" @close="closeSettings" />
+    <ServerDiscoveryModal
+      :is-open="isDiscoveryOpen"
+      @close="closeDiscovery"
+      @joined="handleServerJoined"
+    />
     <CreateServerModal
       :is-open="isCreateServerOpen"
       @close="closeCreateServer"

@@ -149,7 +149,7 @@ test("should return the current user's servers through GraphQL", async () => {
         name: string;
         avatarUrl: string | null;
         isPublic: boolean;
-        role: "OWNER" | "ADMIN" | "MEMBER";
+        role: "OWNER" | "MEMBER";
       }>;
     };
   };

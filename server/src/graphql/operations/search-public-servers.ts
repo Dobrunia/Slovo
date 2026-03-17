@@ -10,11 +10,12 @@ import {
 import type { GraphqlContext } from '../context.js';
 
 const searchPublicServersInputSchema = z.object({
-  query: z.string().trim().min(1).max(SERVER_NAME_MAX_LENGTH),
+  query: z.string().trim().max(SERVER_NAME_MAX_LENGTH),
 });
 
 /**
- * Приватный GraphQL-query поиска публичных серверов по названию.
+ * Приватный GraphQL-query поиска публичных серверов по названию
+ * и выдачи двух самых популярных рекомендаций при пустом запросе.
  */
 export const searchPublicServersQuery = query({
   name: 'searchPublicServers',
@@ -36,19 +37,38 @@ export const searchPublicServersQuery = query({
       where: {
         isPublic: true,
       },
-      orderBy: {
-        updatedAt: 'desc',
-      },
     });
+    const publicServersWithPopularity = await Promise.all(
+      publicServers.map(async (server) => ({
+        server,
+        memberCount: await graphqlContext.dataLayer.prisma.serverMember.count({
+          where: {
+            serverId: server.id,
+          },
+        }),
+      })),
+    );
 
-    return publicServers
-      .filter((server) => server.name.toLowerCase().includes(queryValue))
-      .map((server) =>
-        toPublicServerDiscoveryItem({
-          id: server.id,
-          name: server.name,
-          avatarUrl: server.avatarUrl,
-        })
-      );
+    const filteredServers = publicServersWithPopularity
+      .filter(({ server }) =>
+        queryValue.length === 0 ? true : server.name.toLowerCase().includes(queryValue),
+      )
+      .sort((left, right) => {
+        if (right.memberCount !== left.memberCount) {
+          return right.memberCount - left.memberCount;
+        }
+
+        return right.server.updatedAt.getTime() - left.server.updatedAt.getTime();
+      });
+
+    const recommendedServers = queryValue.length === 0 ? filteredServers.slice(0, 2) : filteredServers;
+
+    return recommendedServers.map(({ server }) =>
+      toPublicServerDiscoveryItem({
+        id: server.id,
+        name: server.name,
+        avatarUrl: server.avatarUrl,
+      }),
+    );
   },
 });

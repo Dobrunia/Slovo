@@ -28,6 +28,7 @@ const snapshot = computed(() => serverModuleStore.snapshot);
  * Возвращает данные выбранного сервера.
  */
 const selectedServer = computed(() => snapshot.value?.server ?? null);
+const canManageServer = computed(() => selectedServer.value?.role === "OWNER");
 
 /**
  * Возвращает список каналов выбранного сервера.
@@ -79,6 +80,7 @@ function handleSelectChannel(channelId: string): void {
       </div>
 
       <AppIconButton
+        v-if="canManageServer"
         :icon-src="settingsIcon"
         label="Открыть настройки сервера"
         icon-alt=""
@@ -129,7 +131,7 @@ function handleSelectChannel(channelId: string): void {
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  background: var(--dbru-color-surface);
+  background: var(--dbru-color-bg);
   border-right: var(--dbru-border-size-1) solid var(--dbru-color-border);
 }
 

@@ -56,7 +56,7 @@ test("should return the selected server snapshot with channels through GraphQL",
     id: "membership-1",
     serverId: "server-1",
     userId: "user-1",
-    role: "ADMIN",
+    role: "OWNER",
     createdAt: new Date(),
     updatedAt: new Date(),
   });
@@ -126,7 +126,7 @@ test("should return the selected server snapshot with channels through GraphQL",
           name: string;
           avatarUrl: string | null;
           isPublic: boolean;
-          role: "OWNER" | "ADMIN" | "MEMBER";
+          role: "OWNER" | "MEMBER";
         };
         channels: Array<{
           id: string;
@@ -143,7 +143,7 @@ test("should return the selected server snapshot with channels through GraphQL",
       name: "Alpha",
       avatarUrl: "https://example.com/server.png",
       isPublic: true,
-      role: "ADMIN",
+      role: "OWNER",
     },
     channels: [
       {

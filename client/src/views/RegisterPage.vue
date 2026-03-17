@@ -63,14 +63,20 @@
 
 <script setup lang="ts">
 import { computed, reactive } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { DbrButton, DbrInput } from "dobruniaui-vue";
 import AuthFormPanel from "../components/auth/AuthFormPanel.vue";
-import { APP_HOME_ROUTE_PATH, LOGIN_ROUTE_PATH } from "../constants";
+import {
+  APP_HOME_ROUTE_PATH,
+  AUTH_REDIRECT_QUERY_KEY,
+  LOGIN_ROUTE_PATH,
+} from "../constants";
+import { readAuthRedirectPath } from "../router/guards";
 import { useAuthStore } from "../stores/auth";
 import type { RegisterFormModel } from "../types/auth";
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 
 const form = reactive<RegisterFormModel>({
@@ -101,14 +107,22 @@ async function handleSubmit(): Promise<void> {
     password: form.password,
   });
 
-  await router.replace(APP_HOME_ROUTE_PATH);
+  await router.replace(
+    readAuthRedirectPath(route.query[AUTH_REDIRECT_QUERY_KEY]) ?? APP_HOME_ROUTE_PATH,
+  );
 }
 
 /**
  * Переводит пользователя на экран входа.
  */
 async function goToLogin(): Promise<void> {
-  await router.replace(LOGIN_ROUTE_PATH);
+  await router.replace({
+    path: LOGIN_ROUTE_PATH,
+    query: {
+      [AUTH_REDIRECT_QUERY_KEY]:
+        readAuthRedirectPath(route.query[AUTH_REDIRECT_QUERY_KEY]) ?? undefined,
+    },
+  });
 }
 </script>
 

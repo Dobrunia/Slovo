@@ -45,7 +45,7 @@ export type StoredTestServerMember = {
   id: string;
   serverId: string;
   userId: string;
-  role: "OWNER" | "ADMIN" | "MEMBER";
+  role: "OWNER" | "MEMBER";
   createdAt: Date;
   updatedAt: Date;
 };
@@ -299,13 +299,57 @@ export function createAuthTestDataLayer() {
 
           return server;
         },
+        delete: async (args: {
+          where: {
+            id: string;
+          };
+        }) => {
+          const serverIndex = servers.findIndex((storedServer) => storedServer.id === args.where.id);
+
+          if (serverIndex < 0) {
+            throw new Error("Server not found");
+          }
+
+          const [removedServer] = servers.splice(serverIndex, 1);
+
+          for (let index = serverMembers.length - 1; index >= 0; index -= 1) {
+            if (serverMembers[index]?.serverId === removedServer?.id) {
+              serverMembers.splice(index, 1);
+            }
+          }
+
+          for (let index = voiceChannels.length - 1; index >= 0; index -= 1) {
+            if (voiceChannels[index]?.serverId === removedServer?.id) {
+              voiceChannels.splice(index, 1);
+            }
+          }
+
+          for (let index = serverBans.length - 1; index >= 0; index -= 1) {
+            if (serverBans[index]?.serverId === removedServer?.id) {
+              serverBans.splice(index, 1);
+            }
+          }
+
+          return removedServer;
+        },
       },
       serverMember: {
+        count: async (args?: {
+          where?: {
+            userId?: string;
+            serverId?: string;
+          };
+        }) =>
+          serverMembers.filter(
+            (member) =>
+              (args?.where?.userId === undefined || member.userId === args.where.userId) &&
+              (args?.where?.serverId === undefined || member.serverId === args.where.serverId),
+          ).length,
         create: async (args: {
           data: {
             serverId: string;
             userId: string;
-            role: "OWNER" | "ADMIN" | "MEMBER";
+            role: "OWNER" | "MEMBER";
           };
         }) => {
           const now = new Date();
@@ -356,6 +400,7 @@ export function createAuthTestDataLayer() {
         findMany: async (args?: {
           where?: {
             userId?: string;
+            serverId?: string;
           };
           orderBy?: {
             server?: {
@@ -367,7 +412,9 @@ export function createAuthTestDataLayer() {
           };
         }) => {
           const filteredMembers = serverMembers.filter(
-            (member) => args?.where?.userId === undefined || member.userId === args.where.userId,
+            (member) =>
+              (args?.where?.userId === undefined || member.userId === args.where.userId) &&
+              (args?.where?.serverId === undefined || member.serverId === args.where.serverId),
           );
 
           const enrichedMembers = filteredMembers.map((member) => ({
@@ -392,6 +439,33 @@ export function createAuthTestDataLayer() {
         },
       },
       voiceChannel: {
+        create: async (args: {
+          data: {
+            serverId: string;
+            name: string;
+            sortOrder: number;
+          };
+        }) => {
+          const now = new Date();
+          const voiceChannel: StoredTestVoiceChannel = {
+            id: `channel-${voiceChannels.length + 1}`,
+            serverId: args.data.serverId,
+            name: args.data.name,
+            sortOrder: args.data.sortOrder,
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          voiceChannels.push(voiceChannel);
+
+          return voiceChannel;
+        },
+        findUnique: async (args: {
+          where: {
+            id: string;
+          };
+        }) =>
+          voiceChannels.find((channel) => channel.id === args.where.id) ?? null,
         findMany: async (args?: {
           where?: {
             serverId?: string;
@@ -413,6 +487,50 @@ export function createAuthTestDataLayer() {
           }
 
           return channels;
+        },
+        update: async (args: {
+          where: {
+            id: string;
+          };
+          data: {
+            name?: string;
+            sortOrder?: number;
+          };
+        }) => {
+          const channel = voiceChannels.find((storedChannel) => storedChannel.id === args.where.id);
+
+          if (!channel) {
+            throw new Error("VoiceChannel not found");
+          }
+
+          if (args.data.name !== undefined) {
+            channel.name = args.data.name;
+          }
+
+          if (args.data.sortOrder !== undefined) {
+            channel.sortOrder = args.data.sortOrder;
+          }
+
+          channel.updatedAt = new Date();
+
+          return channel;
+        },
+        delete: async (args: {
+          where: {
+            id: string;
+          };
+        }) => {
+          const channelIndex = voiceChannels.findIndex(
+            (storedChannel) => storedChannel.id === args.where.id,
+          );
+
+          if (channelIndex < 0) {
+            throw new Error("VoiceChannel not found");
+          }
+
+          const [removedChannel] = voiceChannels.splice(channelIndex, 1);
+
+          return removedChannel;
         },
       },
       serverBan: {

@@ -112,7 +112,7 @@ test("should join a public server through GraphQL and emit a user server realtim
           name: string;
           avatarUrl: string | null;
           isPublic: boolean;
-          role: "OWNER" | "ADMIN" | "MEMBER";
+          role: "OWNER" | "MEMBER";
         };
       };
     };
@@ -220,7 +220,7 @@ test("should join a private server through GraphQL by invite token", async () =>
           name: string;
           avatarUrl: string | null;
           isPublic: boolean;
-          role: "OWNER" | "ADMIN" | "MEMBER";
+          role: "OWNER" | "MEMBER";
         };
       };
     };

@@ -5,6 +5,7 @@ import {
   ROOT_ROUTE_PATH,
   LOGIN_ROUTE_PATH,
   REGISTER_ROUTE_PATH,
+  SERVER_INVITE_ROUTE_PATH,
 } from "../constants";
 import { resolveRouteAccess } from "./guards";
 import {
@@ -13,6 +14,7 @@ import {
   APP_SERVER_CHANNEL_ROUTE_PATH,
   APP_SERVER_ROUTE_NAME,
   APP_SERVER_ROUTE_PATH,
+  SERVER_INVITE_ROUTE_NAME,
 } from "./serverRoutes";
 import { pinia } from "../stores/pinia";
 import { useAuthStore } from "../stores/auth";
@@ -81,6 +83,15 @@ export const router = createRouter({
         title: DEFAULT_CLIENT_APP_TITLE,
       },
     },
+    {
+      path: SERVER_INVITE_ROUTE_PATH,
+      name: SERVER_INVITE_ROUTE_NAME,
+      component: HomePage,
+      meta: {
+        requiresAuth: true,
+        title: DEFAULT_CLIENT_APP_TITLE,
+      },
+    },
   ],
 });
 
@@ -91,5 +102,11 @@ router.beforeEach(async (to) => {
     await authStore.initialize();
   }
 
-  return resolveRouteAccess(to.meta, authStore.isAuthenticated);
+  return resolveRouteAccess(
+    {
+      meta: to.meta,
+      fullPath: to.fullPath,
+    },
+    authStore.isAuthenticated,
+  );
 });

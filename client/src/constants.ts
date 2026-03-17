@@ -55,3 +55,18 @@ export const REGISTER_ROUTE_PATH = "/register";
  * Защищенный основной маршрут приложения.
  */
 export const APP_HOME_ROUTE_PATH = "/app";
+
+/**
+ * Публичный client-side path для invite-ссылок серверов.
+ */
+export const SERVER_INVITE_ROUTE_PATH = "/invite/:inviteToken";
+
+/**
+ * Префикс client-side invite-маршрута без параметра токена.
+ */
+export const SERVER_INVITE_ROUTE_PREFIX = "/invite/";
+
+/**
+ * Query-ключ, в котором хранится post-auth redirect target.
+ */
+export const AUTH_REDIRECT_QUERY_KEY = "redirect";

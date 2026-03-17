@@ -29,6 +29,13 @@ export const publicServerSnapshotSchema = z.object({
 });
 
 /**
+ * Публичный payload измененной структуры voice-каналов сервера.
+ */
+export const publicServerChannelsSchema = z.object({
+  channels: z.array(publicVoiceChannelSchema),
+});
+
+/**
  * Публичная форма invite-ссылки сервера для server settings и invite-flow.
  */
 export const publicServerInviteLinkSchema = z.object({
@@ -50,7 +57,7 @@ export const publicServerDiscoveryItemSchema = z.object({
  * Публичный payload сервера в списке пользовательских серверов.
  */
 export type PublicServerListItem = z.infer<typeof publicServerListItemSchema> & {
-  role: "OWNER" | "ADMIN" | "MEMBER";
+  role: "OWNER" | "MEMBER";
 };
 
 /**
@@ -64,6 +71,11 @@ export type PublicVoiceChannel = z.infer<typeof publicVoiceChannelSchema>;
 export type PublicServerSnapshot = z.infer<typeof publicServerSnapshotSchema> & {
   server: PublicServerListItem;
 };
+
+/**
+ * Публичный payload структуры каналов сервера.
+ */
+export type PublicServerChannels = z.infer<typeof publicServerChannelsSchema>;
 
 /**
  * Публичная invite-ссылка сервера.
@@ -80,7 +92,7 @@ type PublicServerListItemSource = {
   name: string;
   avatarUrl: string | null;
   isPublic: boolean;
-  role: "OWNER" | "ADMIN" | "MEMBER";
+  role: "OWNER" | "MEMBER";
 };
 
 type PublicServerDiscoveryItemSource = {

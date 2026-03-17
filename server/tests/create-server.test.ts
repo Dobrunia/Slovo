@@ -105,7 +105,7 @@ test("should create a server, owner membership and realtime notification through
           name: string;
           avatarUrl: string | null;
           isPublic: boolean;
-          role: "OWNER" | "ADMIN" | "MEMBER";
+          role: "OWNER" | "MEMBER";
         };
       };
     };

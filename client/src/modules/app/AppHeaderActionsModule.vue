@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import AppIconButton from "../../components/base/AppIconButton.vue";
+import searchIcon from "../../assets/icons/search.svg";
 import addServerIcon from "../../assets/icons/add-server.svg";
 import settingsIcon from "../../assets/icons/settings.svg";
 
 const emit = defineEmits<{
+  openDiscovery: [];
   addServer: [];
   openSettings: [];
 }>();
@@ -11,6 +13,13 @@ const emit = defineEmits<{
 
 <template>
   <div class="app-header-actions">
+    <AppIconButton
+      :icon-src="searchIcon"
+      label="Поиск серверов"
+      icon-alt=""
+      @click="emit('openDiscovery')"
+    />
+
     <AppIconButton
       :icon-src="addServerIcon"
       label="Добавить сервер"
