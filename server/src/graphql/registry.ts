@@ -11,6 +11,8 @@ import { myServersQuery } from "./operations/my-servers.js";
 import { loginMutation } from "./operations/login.js";
 import { registerMutation } from "./operations/register.js";
 import { serverSnapshotQuery } from "./operations/server-snapshot.js";
+import { updateAvatarMutation } from "./operations/update-avatar.js";
+import { updateDisplayNameMutation } from "./operations/update-display-name.js";
 
 /**
  * Реестр read-операций текущего GraphQL foundation.
@@ -20,7 +22,13 @@ export const queries = [healthQuery, meQuery, myServersQuery, serverSnapshotQuer
 /**
  * Реестр write-операций, который будет расширяться следующими задачами.
  */
-export const mutations = [registerMutation, loginMutation, createServerMutation];
+export const mutations = [
+  registerMutation,
+  loginMutation,
+  createServerMutation,
+  updateDisplayNameMutation,
+  updateAvatarMutation,
+];
 
 /**
  * Единая StrictQL-схема с базовыми лимитами безопасности.

@@ -127,6 +127,33 @@ export function createAuthTestDataLayer() {
 
           return user;
         },
+        update: async (args: {
+          where: {
+            id: string;
+          };
+          data: {
+            displayName?: string;
+            avatarUrl?: string | null;
+          };
+        }) => {
+          const user = users.find((storedUser) => storedUser.id === args.where.id);
+
+          if (!user) {
+            throw new Error("User not found");
+          }
+
+          if (args.data.displayName !== undefined) {
+            user.displayName = args.data.displayName;
+          }
+
+          if (args.data.avatarUrl !== undefined) {
+            user.avatarUrl = args.data.avatarUrl;
+          }
+
+          user.updatedAt = new Date();
+
+          return user;
+        },
       },
       authSession: {
         create: async (args: {

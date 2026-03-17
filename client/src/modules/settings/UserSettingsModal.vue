@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { DbrAvatar, DbrButton } from "dobruniaui-vue";
+import { DbrAvatar, DbrButton, DbrInput } from "dobruniaui-vue";
 import AppModalLayout from "../../components/base/AppModalLayout.vue";
 import { useAuthStore } from "../../stores/auth";
 import { useServersStore } from "../../stores/servers";
 
-defineProps<{
+const props = defineProps<{
   isOpen: boolean;
 }>();
 
@@ -23,6 +23,52 @@ const profileHandle = computed(() =>
   authStore.currentUser?.username ? `@${authStore.currentUser.username}` : "@slovo-user",
 );
 const profileEmail = computed(() => authStore.currentUser?.email ?? "Email не указан");
+const draftDisplayName = ref("");
+const draftAvatarUrl = ref("");
+
+const previewName = computed(() => {
+  const normalizedName = draftDisplayName.value.trim();
+  return normalizedName.length > 0 ? normalizedName : profileName.value;
+});
+
+const previewAvatarUrl = computed(() => {
+  const normalizedAvatarUrl = normalizeDraftAvatarUrl(draftAvatarUrl.value);
+  return normalizedAvatarUrl ?? undefined;
+});
+
+/**
+ * Синхронизирует состояние формы с текущим пользователем при открытии модального окна.
+ */
+function syncDraftWithCurrentUser(): void {
+  draftDisplayName.value = authStore.currentUser?.displayName ?? "";
+  draftAvatarUrl.value = authStore.currentUser?.avatarUrl ?? "";
+  authStore.clearProfileError();
+}
+
+watch(
+  () => props.isOpen,
+  (isOpen) => {
+    if (isOpen) {
+      syncDraftWithCurrentUser();
+    }
+  },
+  { immediate: true },
+);
+
+/**
+ * Сохраняет изменения профиля и закрывает модальное окно при успехе.
+ */
+async function handleSaveProfile(): Promise<void> {
+  try {
+    await authStore.updateProfile({
+      displayName: draftDisplayName.value,
+      avatarUrl: draftAvatarUrl.value,
+    });
+    emit("close");
+  } catch {
+    // Ошибка уже отражена в store и показана в модальном окне.
+  }
+}
 
 /**
  * Завершает текущую сессию и возвращает пользователя к экрану входа.
@@ -32,6 +78,14 @@ async function handleLogout(): Promise<void> {
   serversStore.reset();
   emit("close");
   await router.replace("/login");
+}
+
+/**
+ * Нормализует черновое значение avatar URL для превью.
+ */
+function normalizeDraftAvatarUrl(value: string): string | null {
+  const normalizedValue = value.trim();
+  return normalizedValue.length > 0 ? normalizedValue : null;
 }
 </script>
 
@@ -44,13 +98,13 @@ async function handleLogout(): Promise<void> {
     <section class="settings-modal__profile">
       <DbrAvatar
         size="lg"
-        :name="profileName"
-        :src="authStore.currentUser?.avatarUrl ?? undefined"
+        :name="previewName"
+        :src="previewAvatarUrl"
       />
 
       <div class="settings-modal__info">
         <h3 class="settings-modal__name dbru-text-base dbru-text-main">
-          {{ profileName }}
+          {{ previewName }}
         </h3>
         <p class="settings-modal__meta dbru-text-sm dbru-text-muted">
           {{ profileHandle }}
@@ -61,14 +115,39 @@ async function handleLogout(): Promise<void> {
       </div>
     </section>
 
-    <section class="settings-modal__body">
-      <p class="settings-modal__copy dbru-text-sm dbru-text-muted">
-        Здесь позже появятся настройки имени, аватара и персональных параметров.
+    <section class="settings-modal__form">
+      <DbrInput
+        v-model="draftDisplayName"
+        label="Отображаемое имя"
+        name="display-name"
+        autocomplete="nickname"
+      />
+
+      <DbrInput
+        v-model="draftAvatarUrl"
+        label="Ссылка на аватар"
+        name="avatar-url"
+        autocomplete="url"
+      />
+
+      <p
+        v-if="authStore.profileErrorMessage"
+        class="settings-modal__error dbru-text-sm dbru-text-main"
+      >
+        {{ authStore.profileErrorMessage }}
       </p>
     </section>
 
     <footer class="settings-modal__footer">
-      <DbrButton variant="danger" @click="handleLogout">Выйти из аккаунта</DbrButton>
+      <div class="settings-modal__actions">
+        <DbrButton
+          :loading="authStore.isProfileUpdating"
+          @click="handleSaveProfile"
+        >
+          Сохранить
+        </DbrButton>
+        <DbrButton variant="danger" @click="handleLogout">Выйти из аккаунта</DbrButton>
+      </div>
     </footer>
   </AppModalLayout>
 </template>
@@ -83,6 +162,7 @@ async function handleLogout(): Promise<void> {
 .settings-modal__info {
   display: grid;
   gap: var(--dbru-space-2);
+  min-width: 0;
 }
 
 .settings-modal__name {
@@ -93,13 +173,14 @@ async function handleLogout(): Promise<void> {
   margin: 0;
 }
 
-.settings-modal__body {
+.settings-modal__form {
   display: grid;
   gap: var(--dbru-space-3);
 }
 
-.settings-modal__copy {
+.settings-modal__error {
   margin: 0;
+  color: var(--dbru-color-error);
 }
 
 .settings-modal__footer {
@@ -107,9 +188,19 @@ async function handleLogout(): Promise<void> {
   justify-content: flex-end;
 }
 
+.settings-modal__actions {
+  display: flex;
+  gap: var(--dbru-space-3);
+}
+
 @media (max-width: 640px) {
   .settings-modal__profile {
     align-items: flex-start;
+  }
+
+  .settings-modal__actions {
+    width: 100%;
+    flex-direction: column;
   }
 }
 </style>

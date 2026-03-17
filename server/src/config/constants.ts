@@ -139,6 +139,11 @@ export const USERNAME_MAX_LENGTH = 191;
 export const DISPLAY_NAME_MAX_LENGTH = 191;
 
 /**
+ * Максимальная длина пользовательского avatar URL.
+ */
+export const USER_AVATAR_URL_MAX_LENGTH = 2048;
+
+/**
  * Максимальная длина пользовательского пароля.
  */
 export const PASSWORD_MAX_LENGTH = 255;
