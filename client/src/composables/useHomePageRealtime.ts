@@ -1,4 +1,4 @@
-import { onUnmounted, watch } from "vue";
+import { onMounted, onUnmounted, watch } from "vue";
 import type { ComputedRef } from "vue";
 import type { Router } from "vue-router";
 import type { useAuthStore } from "../stores/auth";
@@ -28,6 +28,27 @@ export function useHomePageRealtime(input: UseHomePageRealtimeInput): void {
   const { playJoinChannelSound, playLeaveChannelSound } = useAppSounds();
   let stopServerLiveSubscription: null | (() => Promise<void>) = null;
   let serverLiveSubscriptionVersion = 0;
+
+  /**
+   * Локально убирает текущего пользователя из presence-списка, если соединение
+   * уже потеряно или страница уходит на refresh/unload раньше server event roundtrip.
+   */
+  function applyLocalDisconnectCleanup(): void {
+    const currentPresence = input.serverModuleStore.currentUserPresence;
+    const serverId = input.selectedServerId.value;
+
+    if (!currentPresence || !serverId) {
+      return;
+    }
+
+    input.serverModuleStore.applyPresenceUpdated({
+      serverId,
+      member: currentPresence,
+      previousChannelId: currentPresence.channelId,
+      action: "left",
+      occurredAt: new Date().toISOString(),
+    });
+  }
 
   watch(
     [() => input.authStore.sessionToken, input.selectedServerId],
@@ -123,7 +144,21 @@ export function useHomePageRealtime(input: UseHomePageRealtimeInput): void {
     },
   );
 
+  onMounted(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.addEventListener("offline", applyLocalDisconnectCleanup);
+    window.addEventListener("pagehide", applyLocalDisconnectCleanup);
+  });
+
   onUnmounted(() => {
+    if (typeof window !== "undefined") {
+      window.removeEventListener("offline", applyLocalDisconnectCleanup);
+      window.removeEventListener("pagehide", applyLocalDisconnectCleanup);
+    }
+
     if (!stopServerLiveSubscription) {
       return;
     }

@@ -10,6 +10,7 @@ import { DEFAULT_CLIENT_ORIGIN } from "../config/constants.js";
 import type { DataLayer } from "../data/prisma.js";
 import { createRuntimePresenceRegistry, type RuntimePresenceRegistry } from "./presence.js";
 import { createRealtimeChannelJoinAuthorizers } from "./channel-access.js";
+import { handleRealtimeDisconnectCleanup } from "./disconnect.js";
 import { createRealtimeEventDeliverers, createRealtimeEventRouters } from "./events.js";
 import { createRealtimeCorsOriginMatcher } from "./http.js";
 import {
@@ -202,18 +203,6 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         return;
       }
 
-      const previousPresence = presenceRegistry.getUserPresence(userId);
-
-      if (!previousPresence) {
-        return;
-      }
-
-      const removedPresence = presenceRegistry.clearPresence(userId);
-
-      if (!removedPresence) {
-        return;
-      }
-
       const context = createRealtimeServerContext({
         connectionId: socket.id ?? "unknown-connection",
         session: {
@@ -229,17 +218,16 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         },
       });
 
-      await runtime.emitEvent(
-        REALTIME_EVENT_NAMES.presenceUpdated as never,
-        {
-          serverId: previousPresence.serverId,
-          member: previousPresence,
-          previousChannelId: previousPresence.channelId,
-          action: "left",
-          occurredAt: new Date().toISOString(),
-        } as never,
-        { context } as never,
-      );
+      await handleRealtimeDisconnectCleanup({
+        userId,
+        presenceRegistry,
+        emitPresenceUpdated: (payload) =>
+          runtime.emitEvent(
+            REALTIME_EVENT_NAMES.presenceUpdated as never,
+            payload as never,
+            { context } as never,
+          ),
+      });
     });
   });
 

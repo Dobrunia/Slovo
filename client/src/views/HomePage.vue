@@ -147,8 +147,6 @@ async function handleSelectChannel(channelId: string): Promise<void> {
 
   try {
     if (serverModuleStore.currentUserPresence?.channelId === channelId) {
-      await serverModuleStore.leaveCurrentChannel();
-      await router.replace(buildAppServerRoute(selectedServerId.value));
       return;
     }
 
