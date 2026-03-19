@@ -11,6 +11,7 @@ import {
   disposeDataLayer,
 } from "./data/prisma.js";
 import { createGraphqlServer } from "./graphql/server.js";
+import { createMediaFoundation } from "./media/foundation.js";
 import { isSocketIoRequest } from "./realtime/http.js";
 import { createSlovoRealtimeServer } from "./realtime/runtime.js";
 
@@ -28,6 +29,8 @@ async function startServer() {
 
   await connectDataLayer(dataLayer);
   process.stdout.write("Connected to MySQL database\n");
+  const mediaFoundation = await createMediaFoundation();
+  process.stdout.write("MediaSoup foundation initialized\n");
 
   let yoga: ReturnType<typeof createGraphqlServer>;
   const server = createServer((request, response) => {
@@ -40,6 +43,7 @@ async function startServer() {
   const realtime = createSlovoRealtimeServer({
     httpServer: server,
     dataLayer,
+    mediaFoundation,
   });
   yoga = createGraphqlServer({
     dataLayer,
@@ -54,6 +58,7 @@ async function startServer() {
   const shutdown = async () => {
     realtime.io.close();
     server.close();
+    await mediaFoundation.close();
     await disposeDataLayer(dataLayer);
   };
 

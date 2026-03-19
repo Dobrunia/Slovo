@@ -1,5 +1,6 @@
 import type { Server as HttpServer } from "node:http";
 import type { DataLayer } from "../data/prisma.js";
+import type { MediaFoundation } from "../media/foundation.js";
 import { createRealtimeServerContext } from "./foundation.js";
 import { slovoRealtimeRegistry } from "./contracts.js";
 import { createRealtimeServerFoundation } from "./foundation.js";
@@ -7,6 +8,7 @@ import { createRealtimeServerFoundation } from "./foundation.js";
 type CreateSlovoRealtimeServerInput = {
   httpServer: HttpServer;
   dataLayer: DataLayer;
+  mediaFoundation: MediaFoundation;
   clientOrigin?: string;
 };
 
@@ -17,6 +19,7 @@ export function createSlovoRealtimeServer(input: CreateSlovoRealtimeServerInput)
   return createRealtimeServerFoundation({
     httpServer: input.httpServer,
     dataLayer: input.dataLayer,
+    mediaFoundation: input.mediaFoundation,
     clientOrigin: input.clientOrigin,
     registry: slovoRealtimeRegistry,
   });

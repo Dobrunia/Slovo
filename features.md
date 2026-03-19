@@ -320,7 +320,7 @@
     **Зависит от:** Presence model и page UI.
     **Почему идет здесь:** Это делает страницу сервера полноценно live-first.
 
-- [ ] **Поднять MediaSoup foundation на сервере**
+- [x] **Поднять MediaSoup foundation на сервере**
       **Описание:** Подготовить media-слой для голоса и screen share.
       **Что делает:** Инициализирует worker/router и базовый transport flow.
       **Зачем нужна:** Voice и screen share входят в MVP.
@@ -330,7 +330,7 @@
     **Зависит от:** Realtime foundation и channel presence.
     **Почему идет здесь:** Media должен опираться на уже готовую live-модель каналов.
 
-- [ ] **Реализовать signaling bridge между LiveRail и MediaSoup**
+- [x] **Реализовать signaling bridge между LiveRail и MediaSoup**
       **Описание:** Связать live-команды и media transport.
       **Что делает:** Передает сигнальные сообщения для connect/produce/consume.
       **Зачем нужна:** MediaSoup не заменяет прикладной signaling.

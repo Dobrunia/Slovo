@@ -19,6 +19,7 @@ export const REALTIME_EVENT_NAMES = {
   serverUpdated: "server.updated",
   channelsUpdated: "channels.updated",
   presenceUpdated: "presence.updated",
+  voiceSessionSignaled: "voice-session.signaled",
   voiceStateUpdated: "voice-state.updated",
   screenShareUpdated: "screen-share.updated",
   forcedDisconnect: "forced-disconnect",

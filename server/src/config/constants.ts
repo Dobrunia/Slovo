@@ -167,3 +167,36 @@ export const USER_AVATAR_URL_MAX_LENGTH = 2048;
  * Максимальная длина пользовательского пароля.
  */
 export const PASSWORD_MAX_LENGTH = 255;
+
+// MediaSoup
+
+/**
+ * Стандартный listen IP для локальных MediaSoup WebRTC transport-ов.
+ */
+export const DEFAULT_MEDIASOUP_LISTEN_IP = "127.0.0.1";
+
+/**
+ * Опциональный announced address для MediaSoup transport-ов.
+ */
+export const DEFAULT_MEDIASOUP_ANNOUNCED_ADDRESS =
+  process.env.MEDIASOUP_ANNOUNCED_IP?.trim() || null;
+
+/**
+ * Нижняя граница RTC-портов MediaSoup worker-а.
+ */
+export const DEFAULT_MEDIASOUP_RTC_MIN_PORT = 20000;
+
+/**
+ * Верхняя граница RTC-портов MediaSoup worker-а.
+ */
+export const DEFAULT_MEDIASOUP_RTC_MAX_PORT = 20100;
+
+/**
+ * Стандартный стартовый outgoing bitrate для WebRTC transport-а.
+ */
+export const DEFAULT_MEDIASOUP_INITIAL_OUTGOING_BITRATE = 600_000;
+
+/**
+ * Стандартный max incoming bitrate для WebRTC transport-а.
+ */
+export const DEFAULT_MEDIASOUP_MAX_INCOMING_BITRATE = 1_500_000;

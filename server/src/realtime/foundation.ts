@@ -8,6 +8,8 @@ import { createSocketIoServerAdapter } from "dobrunia-liverail-server/socket-io"
 import { Server as SocketIOServer } from "socket.io";
 import { DEFAULT_CLIENT_ORIGIN } from "../config/constants.js";
 import type { DataLayer } from "../data/prisma.js";
+import type { MediaFoundation } from "../media/foundation.js";
+import { createMediaSignalingBridge } from "../media/signaling-bridge.js";
 import { createRuntimePresenceRegistry, type RuntimePresenceRegistry } from "./presence.js";
 import { createRealtimeChannelJoinAuthorizers } from "./channel-access.js";
 import { handleRealtimeDisconnectCleanup } from "./disconnect.js";
@@ -54,6 +56,7 @@ export type RealtimeServerContext<
 type CreateRealtimeServerFoundationInput<TRegistry extends RealtimeRegistry> = {
   httpServer: HttpServer;
   dataLayer: DataLayer;
+  mediaFoundation: MediaFoundation;
   registry: TRegistry;
   clientOrigin?: string;
   presenceRegistry?: RuntimePresenceRegistry;
@@ -78,6 +81,31 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
   const eventRouters = createRealtimeEventRouters();
   const eventDeliverers = createRealtimeEventDeliverers(io);
   let runtime: ReturnType<typeof createServerRuntime<RealtimeServerContext, TRegistry>>;
+  const mediaSignalingBridge = createMediaSignalingBridge({
+    mediaFoundation: input.mediaFoundation,
+    presenceRegistry,
+    emitSignalEvent: (payload) =>
+      runtime.emitEvent(
+        REALTIME_EVENT_NAMES.voiceSessionSignaled as never,
+        payload as never,
+        {
+          context: createRealtimeServerContext({
+            connectionId: "system",
+            session: {
+              sessionId: null,
+            },
+            user: {
+              userId: null,
+            },
+            metadata: {
+              connectedAt: new Date().toISOString(),
+              ipAddress: null,
+              userAgent: "system",
+            },
+          }),
+        } as never,
+      ),
+  });
   runtime = createServerRuntime<RealtimeServerContext, TRegistry>({
     registry: input.registry,
     channelJoinAuthorizers: createRealtimeChannelJoinAuthorizers(input.dataLayer) as never,
@@ -150,6 +178,26 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           serverId: commandInput.serverId,
           channelId: commandInput.channelId,
           targetChannelId: commandInput.targetChannelId,
+        });
+      },
+      [REALTIME_COMMAND_NAMES.signalVoiceSession]: async ({
+        input: commandInput,
+        context,
+      }: {
+        input: {
+          serverId: string;
+          channelId: string;
+          targetUserId: string | null;
+          signalType: string;
+          payloadJson: string;
+        };
+        context: RealtimeServerContext;
+      }) => {
+        const userId = requireRealtimeUserId(context);
+
+        return mediaSignalingBridge.handleSignal({
+          userId,
+          command: commandInput,
         });
       },
     } as never,

@@ -114,6 +114,17 @@ export const realtimeEvents = [
       occurredAt: z.string().min(1),
     }),
   }),
+  event(REALTIME_EVENT_NAMES.voiceSessionSignaled, {
+    payload: z.object({
+      serverId: z.string().min(1),
+      channelId: z.string().min(1),
+      sourceUserId: z.string().min(1),
+      targetUserId: z.string().min(1).nullable(),
+      signalType: z.string().min(1),
+      payloadJson: z.string().min(1),
+      occurredAt: z.string().min(1),
+    }),
+  }),
   event(REALTIME_EVENT_NAMES.voiceStateUpdated, {
     payload: z.object({
       serverId: z.string().min(1),
