@@ -19,14 +19,14 @@ const isMicrophoneMuted = ref(false);
 const isHeadphonesMuted = ref(false);
 
 /**
- * Возвращает отображаемое имя текущего пользователя.
+ * Отображаемое имя текущего пользователя.
  */
 const displayName = computed(
   () => authStore.currentUser?.displayName ?? "Пользователь",
 );
 
 /**
- * Возвращает username в формате handle.
+ * Username текущего пользователя в формате handle.
  */
 const handle = computed(() => {
   const username = authStore.currentUser?.username;
@@ -34,12 +34,12 @@ const handle = computed(() => {
 });
 
 /**
- * Показывает hangup-кнопку только пока пользователь реально находится в канале.
+ * Есть ли у текущего пользователя активное presence в голосовом канале.
  */
 const hasActiveChannelPresence = computed(() => Boolean(serverModuleStore.currentUserPresence));
 
 /**
- * Выводит пользователя из текущего канала и возвращает URL к самому серверу.
+ * Выводит пользователя из текущего канала и возвращает URL к серверу без channel route.
  */
 async function handleLeaveChannel(): Promise<void> {
   if (!serverModuleStore.currentUserPresence || !serverModuleStore.selectedServerId) {
@@ -71,17 +71,17 @@ async function handleLeaveChannel(): Promise<void> {
           {{ handle }}
         </p>
       </div>
-    </div>
 
-    <div class="current-user-control-module__session-actions">
-      <AppIconButton
-        v-if="hasActiveChannelPresence"
-        :icon-src="phoneDownIcon"
-        label="Покинуть канал"
-        icon-alt=""
-        tone="danger"
-        @click="handleLeaveChannel"
-      />
+      <div class="current-user-control-module__session-actions">
+        <AppIconButton
+          v-if="hasActiveChannelPresence"
+          :icon-src="phoneDownIcon"
+          label="Покинуть канал"
+          icon-alt=""
+          tone="danger"
+          @click="handleLeaveChannel"
+        />
+      </div>
     </div>
 
     <div class="current-user-control-module__controls">
@@ -106,9 +106,9 @@ async function handleLeaveChannel(): Promise<void> {
 
 <style scoped>
 .current-user-control-module {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--dbru-space-3);
   padding: var(--dbru-space-4) var(--dbru-space-5);
   background: var(--dbru-color-bg);
@@ -120,6 +120,7 @@ async function handleLeaveChannel(): Promise<void> {
   align-items: center;
   gap: var(--dbru-space-3);
   min-width: 0;
+  flex: 1 1 auto;
 }
 
 .current-user-control-module__text {
@@ -145,27 +146,20 @@ async function handleLeaveChannel(): Promise<void> {
 
 .current-user-control-module__session-actions {
   min-width: 2.5rem;
-  justify-content: flex-end;
 }
 
 @media (max-width: 768px) {
   .current-user-control-module {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "identity session"
-      "controls controls";
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .current-user-control-module__identity {
-    grid-area: identity;
-  }
-
-  .current-user-control-module__session-actions {
-    grid-area: session;
+  .current-user-control-module__identity,
+  .current-user-control-module__controls {
+    width: 100%;
   }
 
   .current-user-control-module__controls {
-    grid-area: controls;
     justify-content: flex-end;
   }
 }

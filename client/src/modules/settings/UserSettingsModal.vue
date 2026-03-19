@@ -27,6 +27,7 @@ const profileHandle = computed(() =>
 const profileEmail = computed(() => authStore.currentUser?.email ?? "Email не указан");
 const draftDisplayName = ref("");
 const draftAvatarUrl = ref("");
+const draftIsSoundEnabled = ref(false);
 
 const previewName = computed(() => {
   const normalizedName = draftDisplayName.value.trim();
@@ -44,6 +45,7 @@ const previewAvatarUrl = computed(() => {
 function syncDraftWithCurrentUser(): void {
   draftDisplayName.value = authStore.currentUser?.displayName ?? "";
   draftAvatarUrl.value = authStore.currentUser?.avatarUrl ?? "";
+  draftIsSoundEnabled.value = isSoundEnabled.value;
   authStore.clearProfileError();
 }
 
@@ -66,6 +68,7 @@ async function handleSaveProfile(): Promise<void> {
       displayName: draftDisplayName.value,
       avatarUrl: draftAvatarUrl.value,
     });
+    isSoundEnabled.value = draftIsSoundEnabled.value;
     emit("close");
   } catch {
     // Ошибка уже отражена в store и показана в модальном окне.
@@ -134,7 +137,7 @@ function normalizeDraftAvatarUrl(value: string): string | null {
 
       <DbrToggle
         size="sm"
-        v-model="isSoundEnabled"
+        v-model="draftIsSoundEnabled"
         label="Включить звуки"
       />
 
