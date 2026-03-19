@@ -59,7 +59,6 @@ async function handleLeaveChannel(): Promise<void> {
   <section class="current-user-control-module">
     <div class="current-user-control-module__identity">
       <DbrAvatar
-        size="sm"
         :name="displayName"
         :src="authStore.currentUser?.avatarUrl ?? undefined"
       />
@@ -111,9 +110,9 @@ async function handleLeaveChannel(): Promise<void> {
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: var(--dbru-space-3);
-  padding: var(--dbru-space-4);
+  padding: var(--dbru-space-4) var(--dbru-space-5);
   background: var(--dbru-color-bg);
-  border-top: var(--dbru-border-size-1) solid var(--dbru-color-border);
+  border-bottom: var(--dbru-border-size-1) solid var(--dbru-color-border);
 }
 
 .current-user-control-module__identity {
@@ -125,7 +124,6 @@ async function handleLeaveChannel(): Promise<void> {
 
 .current-user-control-module__text {
   display: grid;
-  gap: var(--dbru-space-1);
   min-width: 0;
 }
 
