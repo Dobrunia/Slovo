@@ -3,10 +3,12 @@ import { createSocketIoClientTransport } from "dobrunia-liverail-client/socket-i
 import { DEFAULT_CLIENT_REALTIME_URL } from "../constants";
 import { slovoRealtimeRegistry } from "./contracts";
 import type {
+  ClientForcedDisconnectEventPayload,
   ClientPresenceUpdatedEventPayload,
   ClientChannelsUpdatedEventPayload,
   ClientScreenShareUpdatedEventPayload,
   ClientServerUpdatedEventPayload,
+  ClientUserServersUpdatedEventPayload,
   ClientVoiceSessionSignaledEventPayload,
   ClientVoiceStateUpdatedEventPayload,
 } from "../types/server";
@@ -24,6 +26,13 @@ type ServerPresenceSubscriptionInput = {
   sessionToken: string | null;
   serverId: string;
   onPresenceUpdated: (payload: ClientPresenceUpdatedEventPayload) => void;
+};
+
+type UserProfileSubscriptionInput = {
+  sessionToken: string | null;
+  userId: string;
+  onUserServersUpdated: (payload: ClientUserServersUpdatedEventPayload) => void;
+  onForcedDisconnect: (payload: ClientForcedDisconnectEventPayload) => void;
 };
 
 type VoiceSignalingSubscriptionInput = {
@@ -105,6 +114,36 @@ export async function subscribeToServerPresence(
   return async () => {
     stopPresenceUpdated();
     await currentRuntime.unsubscribeChannel("server.presence", channelKey);
+  };
+}
+
+/**
+ * Подписывает клиента на user-level realtime события текущего пользователя.
+ */
+export async function subscribeToCurrentUserProfile(
+  input: UserProfileSubscriptionInput,
+): Promise<() => Promise<void>> {
+  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
+  const channelKey = {
+    userId: input.userId,
+  };
+  const stopUserServersUpdated = currentRuntime.onEvent("user-servers.updated", (payload) => {
+    if (payload.userId === input.userId) {
+      input.onUserServersUpdated(payload);
+    }
+  });
+  const stopForcedDisconnect = currentRuntime.onEvent("forced-disconnect", (payload) => {
+    if (payload.userId === input.userId) {
+      input.onForcedDisconnect(payload);
+    }
+  });
+
+  await currentRuntime.subscribeChannel("user.profile", channelKey);
+
+  return async () => {
+    stopUserServersUpdated();
+    stopForcedDisconnect();
+    await currentRuntime.unsubscribeChannel("user.profile", channelKey);
   };
 }
 

@@ -31,6 +31,13 @@ export function createSlovoRealtimeServer(input: CreateSlovoRealtimeServerInput)
 export type SlovoRealtimeRuntime = ReturnType<typeof createSlovoRealtimeServer>["runtime"];
 
 /**
+ * Публичный тип server-side helper-а для принудительного disconnect пользователя из voice presence.
+ */
+export type SlovoForceDisconnectUserFromServer = ReturnType<
+  typeof createSlovoRealtimeServer
+>["forceDisconnectUserFromServer"];
+
+/**
  * Эмитит серверное realtime-событие вне live-сокет-контекста, например из GraphQL-мутаций.
  */
 export async function emitSystemRealtimeEvent(

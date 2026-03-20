@@ -1,10 +1,14 @@
 import { onMounted, onUnmounted, watch } from "vue";
 import { resolvePresenceSoundCue } from "../realtime/presence-sound";
-import { resetRealtimeRuntime } from "../realtime/runtime";
+import {
+  resetRealtimeRuntime,
+  subscribeToCurrentUserProfile,
+} from "../realtime/runtime";
 import { subscribeToServerLiveState } from "../realtime/server-live";
 import { resetActiveVoiceSession, syncActiveVoiceSession } from "../realtime/voice-session";
 import { useAuthStore } from "../stores/auth";
 import { useServerModuleStore } from "../stores/serverModule";
+import { useServersStore } from "../stores/servers";
 import { useAppSounds } from "./useAppSounds";
 import { useUserPreferences } from "./useUserPreferences";
 
@@ -26,7 +30,9 @@ export function useHomePageRealtime({
 }: UseHomePageRealtimeOptions): void {
   const { playJoinChannelSound, playLeaveChannelSound } = useAppSounds();
   const { selectedInputDeviceId } = useUserPreferences();
+  const serversStore = useServersStore();
   let stopServerLiveSubscription: (() => void) | null = null;
+  let stopCurrentUserProfileSubscription: (() => void) | null = null;
   let requestedServerLiveSubscriptionTarget: string | null = null;
   let activeServerLiveSubscriptionTarget: string | null = null;
 
@@ -34,6 +40,16 @@ export function useHomePageRealtime({
     [() => authStore.sessionToken, () => selectedServerId.value],
     ([sessionToken, serverId]) => {
       void switchServerLiveSubscription(sessionToken, serverId);
+    },
+    {
+      immediate: true,
+    },
+  );
+
+  watch(
+    [() => authStore.sessionToken, () => authStore.currentUser?.id ?? null],
+    ([sessionToken, currentUserId]) => {
+      void switchCurrentUserProfileSubscription(sessionToken, currentUserId);
     },
     {
       immediate: true,
@@ -107,6 +123,7 @@ export function useHomePageRealtime({
     window.removeEventListener("offline", handleOffline);
     window.removeEventListener("pagehide", handlePageHide);
     teardownServerLiveSubscription();
+    teardownCurrentUserProfileSubscription();
     resetActiveVoiceSession();
     resetRealtimeRuntime();
   });
@@ -196,6 +213,52 @@ export function useHomePageRealtime({
   }
 
   /**
+   * Подписывает текущего пользователя на user-level realtime события профиля и membership.
+   */
+  async function switchCurrentUserProfileSubscription(
+    sessionToken: string | null,
+    currentUserId: string | null,
+  ): Promise<void> {
+    teardownCurrentUserProfileSubscription();
+
+    if (!sessionToken || !currentUserId) {
+      return;
+    }
+
+    try {
+      stopCurrentUserProfileSubscription = await subscribeToCurrentUserProfile({
+        sessionToken,
+        userId: currentUserId,
+        onUserServersUpdated: (payload) => {
+          if (payload.action !== "deleted") {
+            return;
+          }
+
+          serversStore.removeServerItem(payload.serverId);
+          serverModuleStore.handleServerAccessRevoked(payload.serverId);
+        },
+        onForcedDisconnect: (payload) => {
+          serverModuleStore.handleForcedDisconnect(payload);
+          resetActiveVoiceSession();
+        },
+      });
+    } catch (error) {
+      serverModuleStore.presenceErrorMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : "Не удалось подключить пользовательский realtime.";
+    }
+  }
+
+  /**
+   * Удаляет активную user-level подписку профиля текущего пользователя.
+   */
+  function teardownCurrentUserProfileSubscription(): void {
+    stopCurrentUserProfileSubscription?.();
+    stopCurrentUserProfileSubscription = null;
+  }
+
+  /**
    * Локально очищает stale voice-state при разрыве сети до прихода серверного cleanup.
    */
   function handleOffline(): void {
@@ -222,6 +285,7 @@ export function useHomePageRealtime({
 
     serverModuleStore.clearScreenShareStreams();
     teardownServerLiveSubscription();
+    teardownCurrentUserProfileSubscription();
     resetActiveVoiceSession();
     resetRealtimeRuntime();
   }

@@ -766,6 +766,162 @@ describe("server module store", () => {
    * Граничные случаи: сначала пользователь заходит в канал, затем перемещается,
    * а после события `left` должен полностью исчезнуть из локального snapshot-а.
    */
+  /**
+   * Проверяется, что owner-only moderation snapshot участников грузится отдельным query
+   * и сохраняется в store в готовой для модального окна форме.
+   * Это важно, потому что секция модерации не должна вытаскивать участников
+   * из случайных источников или переиспользовать snapshot канала не по назначению.
+   * Граничные случаи: запрос обязан содержать `serverMembers`,
+   * а owner и member должны попасть в итоговый список без потери role и avatarUrl.
+   */
+  test("should load the owner-only server members snapshot", async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      createGraphqlResponse({
+        data: {
+          serverMembers: {
+            serverId: "server-1",
+            members: [
+              {
+                userId: "user-1",
+                displayName: "Добрыня",
+                avatarUrl: null,
+                role: "OWNER",
+              },
+              {
+                userId: "user-2",
+                displayName: "Алиса",
+                avatarUrl: "https://cdn.example.com/alice.png",
+                role: "MEMBER",
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+    authStore.sessionToken = "active-session-token";
+    authStore.status = "authenticated";
+    authStore.isInitialized = true;
+
+    const serverModuleStore = useServerModuleStore();
+    serverModuleStore.selectedServerId = "server-1";
+
+    await serverModuleStore.loadMembers();
+
+    const requestInit = fetchMock.mock.calls.at(0)?.[1] as RequestInit;
+    const payload = JSON.parse(String(requestInit.body)) as {
+      query: string;
+    };
+
+    expect(payload.query).toContain("serverMembers");
+    expect(payload.query).toContain('serverId: "server-1"');
+    expect(serverModuleStore.members).toEqual([
+      {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        role: "OWNER",
+      },
+      {
+        userId: "user-2",
+        displayName: "Алиса",
+        avatarUrl: "https://cdn.example.com/alice.png",
+        role: "MEMBER",
+      },
+    ]);
+  });
+
+  /**
+   * Проверяется, что moderation-действия owner-а идут через отдельные GraphQL-мутации
+   * и локально убирают целевого участника из списка без полной перезагрузки модалки.
+   * Это важно, потому что kick/ban являются частыми owner-only действиями,
+   * и после успешного ответа список участников должен сразу оставаться консистентным.
+   * Граничные случаи: и kick, и ban должны использовать один и тот же выбранный `serverId`,
+   * а store обязан удалять именно того пользователя, которого вернула мутация.
+   */
+  test("should remove the moderated member from the local list after kick and ban", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            kickServerMember: {
+              serverId: "server-1",
+              userId: "user-2",
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            banServerMember: {
+              serverId: "server-1",
+              userId: "user-3",
+            },
+          },
+        }),
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+    authStore.sessionToken = "active-session-token";
+    authStore.status = "authenticated";
+    authStore.isInitialized = true;
+
+    const serverModuleStore = useServerModuleStore();
+    serverModuleStore.selectedServerId = "server-1";
+    serverModuleStore.members = [
+      {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        role: "OWNER",
+      },
+      {
+        userId: "user-2",
+        displayName: "Алиса",
+        avatarUrl: null,
+        role: "MEMBER",
+      },
+      {
+        userId: "user-3",
+        displayName: "Боб",
+        avatarUrl: null,
+        role: "MEMBER",
+      },
+    ];
+
+    await serverModuleStore.kickMember("user-2");
+    await serverModuleStore.banMember("user-3");
+
+    const kickRequestPayload = JSON.parse(
+      String((fetchMock.mock.calls.at(0)?.[1] as RequestInit).body),
+    ) as { query: string };
+    const banRequestPayload = JSON.parse(
+      String((fetchMock.mock.calls.at(1)?.[1] as RequestInit).body),
+    ) as { query: string };
+
+    expect(kickRequestPayload.query).toContain("kickServerMember");
+    expect(kickRequestPayload.query).toContain('targetUserId: "user-2"');
+    expect(banRequestPayload.query).toContain("banServerMember");
+    expect(banRequestPayload.query).toContain('targetUserId: "user-3"');
+    expect(serverModuleStore.members).toEqual([
+      {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        role: "OWNER",
+      },
+    ]);
+  });
+
   test("should apply live presence updates as join move and leave deltas", () => {
     const serverModuleStore = useServerModuleStore();
     serverModuleStore.selectedServerId = "server-1";
@@ -1091,6 +1247,118 @@ describe("server module store", () => {
       serverId: "server-1",
       channelId: "channel-1",
     });
+  });
+
+  /**
+   * Проверяется, что store корректно очищает только экран открытого сервера,
+   * если пользователь потерял к нему доступ через moderation или server deletion,
+   * но при этом не трогает независимое active voice presence на другом сервере.
+   * Это важно, потому что после кика/бана из одного сервера UI должен уйти с его страницы,
+   * не ломая голосовую сессию, которая может идти в другом сервере.
+   * Граничные случаи: selected server совпадает с потерянным доступом,
+   * а active voice presence у пользователя привязан к другому серверу.
+   */
+  test("should clear only the revoked server page state without dropping another active voice presence", () => {
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+
+    const serverModuleStore = useServerModuleStore();
+    serverModuleStore.selectedServerId = "server-1";
+    serverModuleStore.selectedChannelId = "channel-1";
+    serverModuleStore.loadedServerId = "server-1";
+    serverModuleStore.snapshot = {
+      server: {
+        id: "server-1",
+        name: "Первый сервер",
+        avatarUrl: null,
+        isPublic: false,
+        role: "OWNER",
+      },
+      channels: [],
+    };
+    serverModuleStore.inviteLink = {
+      serverId: "server-1",
+      inviteLink: "https://slovo.example/invite/alpha",
+    };
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-2",
+      member: {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        channelId: "channel-9",
+        joinedAt: "2026-03-20T12:00:00.000Z",
+      },
+      previousChannelId: null,
+      action: "joined",
+      occurredAt: "2026-03-20T12:00:00.000Z",
+    });
+
+    serverModuleStore.handleServerAccessRevoked("server-1");
+
+    expect(serverModuleStore.selectedServerId).toBeNull();
+    expect(serverModuleStore.selectedChannelId).toBeNull();
+    expect(serverModuleStore.loadedServerId).toBeNull();
+    expect(serverModuleStore.snapshot).toBeNull();
+    expect(serverModuleStore.inviteLink).toBeNull();
+    expect(serverModuleStore.currentUserPresence).toEqual({
+      serverId: "server-2",
+      userId: "user-1",
+      displayName: "Добрыня",
+      avatarUrl: null,
+      channelId: "channel-9",
+      joinedAt: "2026-03-20T12:00:00.000Z",
+    });
+  });
+
+  /**
+   * Проверяется, что forced disconnect локально снимает пользователя с активного канала,
+   * очищает screen-share stream-ы и сохраняет человекочитаемую причину в presence error state.
+   * Это важно, потому что target-клиент после кика/бана должен мгновенно перестать видеть себя
+   * в канале и получить понятную причину разрыва, не дожидаясь полной перезагрузки страницы.
+   * Граничные случаи: у пользователя уже есть active voice presence и локальные stream-ы,
+   * поэтому store обязан зачистить оба состояния за один вызов.
+   */
+  test("should clear local voice state and keep the forced disconnect reason", () => {
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+
+    const serverModuleStore = useServerModuleStore();
+    const localStream = {} as MediaStream;
+
+    serverModuleStore.selectedServerId = "server-1";
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-20T13:00:00.000Z",
+      },
+      previousChannelId: null,
+      action: "joined",
+      occurredAt: "2026-03-20T13:00:00.000Z",
+    });
+    serverModuleStore.replaceScreenShareStreams([
+      {
+        userId: "user-1",
+        stream: localStream,
+        isCurrentUser: true,
+      },
+    ]);
+
+    serverModuleStore.handleForcedDisconnect({
+      serverId: "server-1",
+      userId: "user-1",
+      reason: "Вы были исключены из сервера.",
+      occurredAt: "2026-03-20T13:01:00.000Z",
+    });
+
+    expect(serverModuleStore.currentUserPresence).toBeNull();
+    expect(serverModuleStore.selectedChannelId).toBeNull();
+    expect(serverModuleStore.screenShareStreams).toEqual([]);
+    expect(serverModuleStore.presenceErrorMessage).toBe("Вы были исключены из сервера.");
   });
 
   /**

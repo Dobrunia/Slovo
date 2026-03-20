@@ -5,12 +5,16 @@ import { DEFAULT_CLIENT_ORIGIN, DEFAULT_GRAPHQL_PATH } from '../config/constants
 import { createGraphqlContext } from './context.js';
 import { strictqlApiSchema } from './registry.js';
 import type { RuntimePresenceRegistry } from '../realtime/presence.js';
-import type { SlovoRealtimeRuntime } from '../realtime/runtime.js';
+import type {
+  SlovoForceDisconnectUserFromServer,
+  SlovoRealtimeRuntime,
+} from '../realtime/runtime.js';
 
 type GraphqlServerInput = {
   dataLayer: DataLayer;
   realtimeRuntime?: SlovoRealtimeRuntime | null;
   presenceRegistry?: RuntimePresenceRegistry | null;
+  forceDisconnectUserFromServer?: SlovoForceDisconnectUserFromServer | null;
 };
 
 /**
@@ -28,6 +32,7 @@ export function createGraphqlServer(input: GraphqlServerInput) {
         dataLayer: input.dataLayer,
         realtimeRuntime: input.realtimeRuntime,
         presenceRegistry: input.presenceRegistry,
+        forceDisconnectUserFromServer: input.forceDisconnectUserFromServer,
         request: adapterContext as Request,
       }),
   });

@@ -49,6 +49,7 @@ async function startServer() {
     dataLayer,
     realtimeRuntime: realtime.runtime,
     presenceRegistry: realtime.presenceRegistry,
+    forceDisconnectUserFromServer: realtime.forceDisconnectUserFromServer,
   });
 
   await new Promise<void>((resolve) => {

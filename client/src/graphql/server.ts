@@ -7,9 +7,11 @@ import type {
   ClientCreateVoiceChannelInput,
   ClientDeleteServerResult,
   ClientDeleteVoiceChannelInput,
+  ClientModerationResult,
   ClientReorderVoiceChannelsInput,
   ClientServerInviteLink,
   ClientServerChannelsPayload,
+  ClientServerMembersSnapshot,
   ClientServerPresenceSnapshot,
   ClientServerSnapshot,
   ClientUpdateServerInput,
@@ -89,12 +91,23 @@ export interface ServerApiClient {
     sessionToken: string,
     serverId: string,
   ): Promise<ClientServerInviteLink>;
+  serverMembers(sessionToken: string, serverId: string): Promise<ClientServerMembersSnapshot>;
   updateServer(
     sessionToken: string,
     serverId: string,
     input: ClientUpdateServerInput,
   ): Promise<ClientUpdateServerResult>;
   deleteServer(sessionToken: string, serverId: string): Promise<ClientDeleteServerResult>;
+  kickServerMember(
+    sessionToken: string,
+    serverId: string,
+    targetUserId: string,
+  ): Promise<ClientModerationResult>;
+  banServerMember(
+    sessionToken: string,
+    serverId: string,
+    targetUserId: string,
+  ): Promise<ClientModerationResult>;
 }
 
 /**
@@ -202,6 +215,14 @@ export function createServerApiClient(
 
       return data.regenerateServerInviteLink;
     },
+    async serverMembers(sessionToken, serverId) {
+      const data = await request<{ serverMembers: ClientServerMembersSnapshot }>(
+        buildServerMembersQuery(serverId),
+        sessionToken,
+      );
+
+      return data.serverMembers;
+    },
     async updateServer(sessionToken, serverId, input) {
       const data = await request<{ updateServer: ClientUpdateServerResult }>(
         buildUpdateServerMutation(serverId, input),
@@ -217,6 +238,22 @@ export function createServerApiClient(
       );
 
       return data.deleteServer;
+    },
+    async kickServerMember(sessionToken, serverId, targetUserId) {
+      const data = await request<{ kickServerMember: ClientModerationResult }>(
+        buildKickServerMemberMutation(serverId, targetUserId),
+        sessionToken,
+      );
+
+      return data.kickServerMember;
+    },
+    async banServerMember(sessionToken, serverId, targetUserId) {
+      const data = await request<{ banServerMember: ClientModerationResult }>(
+        buildBanServerMemberMutation(serverId, targetUserId),
+        sessionToken,
+      );
+
+      return data.banServerMember;
     },
   };
 }
@@ -371,6 +408,29 @@ function buildRegenerateServerInviteLinkMutation(serverId: string): string {
 }
 
 /**
+ * Строит GraphQL-query owner-only списка участников сервера.
+ */
+function buildServerMembersQuery(serverId: string): string {
+  return `
+    query {
+      serverMembers(
+        input: {
+          serverId: ${toGraphqlString(serverId)}
+        }
+      ) {
+        serverId
+        members {
+          userId
+          displayName
+          avatarUrl
+          role
+        }
+      }
+    }
+  `;
+}
+
+/**
  * Строит GraphQL-мутацию обновления названия и аватара сервера.
  */
 function buildUpdateServerMutation(
@@ -410,6 +470,44 @@ function buildDeleteServerMutation(serverId: string): string {
         }
       ) {
         serverId
+      }
+    }
+  `;
+}
+
+/**
+ * Строит GraphQL-мутацию кика участника сервера.
+ */
+function buildKickServerMemberMutation(serverId: string, targetUserId: string): string {
+  return `
+    mutation {
+      kickServerMember(
+        input: {
+          serverId: ${toGraphqlString(serverId)}
+          targetUserId: ${toGraphqlString(targetUserId)}
+        }
+      ) {
+        serverId
+        userId
+      }
+    }
+  `;
+}
+
+/**
+ * Строит GraphQL-мутацию бана участника сервера.
+ */
+function buildBanServerMemberMutation(serverId: string, targetUserId: string): string {
+  return `
+    mutation {
+      banServerMember(
+        input: {
+          serverId: ${toGraphqlString(serverId)}
+          targetUserId: ${toGraphqlString(targetUserId)}
+        }
+      ) {
+        serverId
+        userId
       }
     }
   `;

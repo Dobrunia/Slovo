@@ -32,6 +32,16 @@ export const publicRuntimePresenceMemberSchema = z.object({
 });
 
 /**
+ * Публичная форма участника сервера для owner-only moderation UI.
+ */
+export const publicServerMemberSchema = z.object({
+  userId: z.string().min(1),
+  displayName: z.string().min(1),
+  avatarUrl: z.string().url().optional(),
+  role: z.string().min(1),
+});
+
+/**
  * Публичный initial snapshot выбранного сервера.
  */
 export const publicServerSnapshotSchema = z.object({
@@ -51,6 +61,14 @@ export const publicServerChannelsSchema = z.object({
  */
 export const publicServerPresenceSnapshotSchema = z.object({
   members: z.array(publicRuntimePresenceMemberSchema),
+});
+
+/**
+ * Публичный snapshot участников сервера для owner-only moderation UI.
+ */
+export const publicServerMembersSnapshotSchema = z.object({
+  serverId: z.string().min(1),
+  members: z.array(publicServerMemberSchema),
 });
 
 /**
@@ -101,6 +119,18 @@ export type PublicServerChannels = z.infer<typeof publicServerChannelsSchema>;
 export type PublicServerPresenceSnapshot = z.infer<typeof publicServerPresenceSnapshotSchema>;
 
 /**
+ * Публичный snapshot участников сервера для модерации.
+ */
+export type PublicServerMembersSnapshot = z.infer<typeof publicServerMembersSnapshotSchema>;
+
+/**
+ * Публичная форма участника сервера для owner-only moderation UI.
+ */
+export type PublicServerMember = z.infer<typeof publicServerMemberSchema> & {
+  role: "OWNER" | "MEMBER";
+};
+
+/**
  * Публичная invite-ссылка сервера.
  */
 export type PublicServerInviteLink = z.infer<typeof publicServerInviteLinkSchema>;
@@ -128,6 +158,13 @@ type PublicVoiceChannelSource = {
   id: string;
   name: string;
   sortOrder: number;
+};
+
+type PublicServerMemberSource = {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  role: "OWNER" | "MEMBER";
 };
 
 /**
@@ -174,6 +211,20 @@ export function toPublicRuntimePresenceMember(input: {
     avatarUrl: input.avatarUrl,
     channelId: input.channelId,
     joinedAt: input.joinedAt,
+  };
+}
+
+/**
+ * Преобразует серверную запись участника сервера в безопасную moderation-форму.
+ */
+export function toPublicServerMember(
+  member: PublicServerMemberSource,
+): PublicServerMember {
+  return {
+    userId: member.userId,
+    displayName: member.displayName,
+    avatarUrl: member.avatarUrl ?? undefined,
+    role: member.role,
   };
 }
 

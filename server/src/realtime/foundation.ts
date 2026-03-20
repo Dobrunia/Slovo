@@ -16,6 +16,7 @@ import { createRuntimeScreenShareRegistry } from "./screen-share.js";
 import { createRealtimeChannelJoinAuthorizers } from "./channel-access.js";
 import { handleRealtimeDisconnectCleanup } from "./disconnect.js";
 import { createRealtimeEventDeliverers, createRealtimeEventRouters } from "./events.js";
+import { forceDisconnectRealtimeUser } from "./forced-disconnect.js";
 import { createRealtimeCorsOriginMatcher } from "./http.js";
 import {
   requireRealtimeUserId,
@@ -491,12 +492,73 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
     });
   });
 
+  /**
+   * Принудительно выкидывает пользователя из voice presence сервера,
+   * если moderation или другое серверное действие требует немедленного teardown.
+   */
+  async function forceDisconnectUserFromServer(input: {
+    userId: string;
+    serverId: string;
+    reason: string;
+  }): Promise<boolean> {
+    return forceDisconnectRealtimeUser({
+      userId: input.userId,
+      serverId: input.serverId,
+      reason: input.reason,
+      presenceRegistry,
+      voiceStateRegistry,
+      screenShareRegistry,
+      mediaSignalingBridge,
+      emitPresenceUpdated: (payload) =>
+        runtime.emitEvent(
+          REALTIME_EVENT_NAMES.presenceUpdated as never,
+          payload as never,
+          createSystemEventEmitOptions() as never,
+        ),
+      emitScreenShareUpdated: (payload) =>
+        runtime.emitEvent(
+          REALTIME_EVENT_NAMES.screenShareUpdated as never,
+          payload as never,
+          createSystemEventEmitOptions() as never,
+        ),
+      emitForcedDisconnect: (payload) =>
+        runtime.emitEvent(
+          REALTIME_EVENT_NAMES.forcedDisconnect as never,
+          payload as never,
+          createSystemEventEmitOptions() as never,
+        ),
+    });
+  }
+
   return {
     io,
     runtime,
     adapter,
     presenceRegistry,
+    forceDisconnectUserFromServer,
   };
+
+  /**
+   * Создает единый system-context для серверных realtime-событий вне socket-команд.
+   */
+  function createSystemEventEmitOptions() {
+    return {
+      context: createRealtimeServerContext({
+        connectionId: "system",
+        session: {
+          sessionId: null,
+        },
+        user: {
+          userId: null,
+        },
+        metadata: {
+          connectedAt: new Date().toISOString(),
+          ipAddress: null,
+          userAgent: "system",
+        },
+      }),
+    };
+  }
 }
 
 type CreateRealtimeServerContextInput<

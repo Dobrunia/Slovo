@@ -1,7 +1,10 @@
 import { resolveSessionUserId } from '../auth/session.js';
 import type { DataLayer } from '../data/prisma.js';
 import type { RuntimePresenceRegistry } from '../realtime/presence.js';
-import type { SlovoRealtimeRuntime } from '../realtime/runtime.js';
+import type {
+  SlovoForceDisconnectUserFromServer,
+  SlovoRealtimeRuntime,
+} from '../realtime/runtime.js';
 
 /**
  * Контекст GraphQL-запроса, общий для StrictQL-резолверов.
@@ -11,12 +14,14 @@ export type GraphqlContext = {
   userId: string | null;
   realtimeRuntime: SlovoRealtimeRuntime | null;
   presenceRegistry: RuntimePresenceRegistry | null;
+  forceDisconnectUserFromServer: SlovoForceDisconnectUserFromServer | null;
 };
 
 type ContextInput = {
   dataLayer: DataLayer;
   realtimeRuntime?: SlovoRealtimeRuntime | null;
   presenceRegistry?: RuntimePresenceRegistry | null;
+  forceDisconnectUserFromServer?: SlovoForceDisconnectUserFromServer | null;
   request: Request;
 };
 
@@ -32,5 +37,6 @@ export async function createGraphqlContext(input: ContextInput): Promise<Graphql
     }),
     realtimeRuntime: input.realtimeRuntime ?? null,
     presenceRegistry: input.presenceRegistry ?? null,
+    forceDisconnectUserFromServer: input.forceDisconnectUserFromServer ?? null,
   };
 }

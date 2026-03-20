@@ -16,6 +16,8 @@ import type {
   ClientActiveVoicePresence,
   ClientChannelsUpdatedEventPayload,
   ClientDeleteServerResult,
+  ClientForcedDisconnectEventPayload,
+  ClientServerMember,
   ClientPresenceUpdatedEventPayload,
   ClientCurrentVoiceState,
   ClientRuntimeScreenShareState,
@@ -46,14 +48,19 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   const isInviteLinkLoading = ref(false);
   const isInviteLinkRegenerating = ref(false);
   const isDeletingServer = ref(false);
+  const isLoadingMembers = ref(false);
+  const isModeratingMembers = ref(false);
   const isChangingPresence = ref(false);
   const errorMessage = ref<string | null>(null);
   const channelsErrorMessage = ref<string | null>(null);
   const serverUpdateErrorMessage = ref<string | null>(null);
   const inviteLinkErrorMessage = ref<string | null>(null);
   const deleteServerErrorMessage = ref<string | null>(null);
+  const membersErrorMessage = ref<string | null>(null);
+  const moderationErrorMessage = ref<string | null>(null);
   const presenceErrorMessage = ref<string | null>(null);
   const presenceMembers = ref<ClientRuntimePresenceMember[]>([]);
+  const members = ref<ClientServerMember[]>([]);
   const activeVoicePresence = ref<ClientActiveVoicePresence | null>(null);
   const screenShareStates = ref<ClientRuntimeScreenShareState[]>([]);
   const screenShareStreams = ref<ClientVoiceScreenShareStream[]>([]);
@@ -168,8 +175,11 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     serverUpdateErrorMessage.value = null;
     inviteLinkErrorMessage.value = null;
     deleteServerErrorMessage.value = null;
+    membersErrorMessage.value = null;
+    moderationErrorMessage.value = null;
     presenceErrorMessage.value = null;
     presenceMembers.value = [];
+    members.value = [];
     activeVoicePresence.value = null;
     screenShareStates.value = [];
     screenShareStreams.value = [];
@@ -309,6 +319,20 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   }
 
   /**
+   * Очищает ошибку загрузки owner-only списка участников сервера.
+   */
+  function clearMembersError(): void {
+    membersErrorMessage.value = null;
+  }
+
+  /**
+   * Очищает ошибку moderation-действий над участниками сервера.
+   */
+  function clearModerationError(): void {
+    moderationErrorMessage.value = null;
+  }
+
+  /**
    * Очищает ошибку runtime presence-команд.
    */
   function clearPresenceError(): void {
@@ -410,6 +434,71 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   }
 
   /**
+   * Загружает owner-only список участников текущего сервера для moderation UI.
+   */
+  async function loadMembers(): Promise<ClientServerMember[]> {
+    const serverId = requireSelectedServerId();
+    const sessionToken = requireSessionToken();
+
+    isLoadingMembers.value = true;
+    membersErrorMessage.value = null;
+
+    try {
+      const result = await serverApiClient.serverMembers(sessionToken, serverId);
+      members.value = result.members;
+      return result.members;
+    } catch (error) {
+      members.value = [];
+      membersErrorMessage.value = toMembersErrorMessage(error);
+      throw error;
+    } finally {
+      isLoadingMembers.value = false;
+    }
+  }
+
+  /**
+   * Кикает участника текущего сервера и сразу убирает его из локального moderation-списка.
+   */
+  async function kickMember(targetUserId: string): Promise<void> {
+    const serverId = requireSelectedServerId();
+    const sessionToken = requireSessionToken();
+
+    isModeratingMembers.value = true;
+    moderationErrorMessage.value = null;
+
+    try {
+      const result = await serverApiClient.kickServerMember(sessionToken, serverId, targetUserId);
+      members.value = members.value.filter((member) => member.userId !== result.userId);
+    } catch (error) {
+      moderationErrorMessage.value = toModerationErrorMessage(error);
+      throw error;
+    } finally {
+      isModeratingMembers.value = false;
+    }
+  }
+
+  /**
+   * Блокирует участника текущего сервера и сразу убирает его из локального moderation-списка.
+   */
+  async function banMember(targetUserId: string): Promise<void> {
+    const serverId = requireSelectedServerId();
+    const sessionToken = requireSessionToken();
+
+    isModeratingMembers.value = true;
+    moderationErrorMessage.value = null;
+
+    try {
+      const result = await serverApiClient.banServerMember(sessionToken, serverId, targetUserId);
+      members.value = members.value.filter((member) => member.userId !== result.userId);
+    } catch (error) {
+      moderationErrorMessage.value = toModerationErrorMessage(error);
+      throw error;
+    } finally {
+      isModeratingMembers.value = false;
+    }
+  }
+
+  /**
    * Выполняет GraphQL initial load snapshot-а выбранного сервера.
    */
   async function loadSelectedServerSnapshot(): Promise<void> {
@@ -423,6 +512,9 @@ export const useServerModuleStore = defineStore("serverModule", () => {
 
     isLoading.value = true;
     errorMessage.value = null;
+    members.value = [];
+    membersErrorMessage.value = null;
+    moderationErrorMessage.value = null;
 
     try {
       const [nextSnapshot, nextPresenceSnapshot] = await Promise.all([
@@ -926,6 +1018,40 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   }
 
   /**
+   * Очищает открытый серверный экран, если пользователь потерял к нему доступ.
+   */
+  function handleServerAccessRevoked(serverId: string): void {
+    if (selectedServerId.value === serverId) {
+      selectedServerId.value = null;
+      selectedChannelId.value = null;
+    }
+
+    if (loadedServerId.value === serverId) {
+      loadedServerId.value = null;
+    }
+
+    if (snapshot.value?.server.id === serverId) {
+      snapshot.value = null;
+      inviteLink.value = null;
+      presenceMembers.value = [];
+      members.value = [];
+      errorMessage.value = null;
+    }
+  }
+
+  /**
+   * Локально применяет forced disconnect текущего пользователя из voice presence сервера.
+   */
+  function handleForcedDisconnect(payload: ClientForcedDisconnectEventPayload): void {
+    if (currentUserPresence.value?.serverId === payload.serverId) {
+      clearCurrentUserPresenceLocally(payload.serverId);
+    }
+
+    clearScreenShareStreams();
+    presenceErrorMessage.value = payload.reason;
+  }
+
+  /**
    * Возвращает активный session token текущего пользователя или завершает операцию ошибкой.
    */
   function requireSessionToken(): string {
@@ -950,14 +1076,19 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     isInviteLinkLoading,
     isInviteLinkRegenerating,
     isDeletingServer,
+    isLoadingMembers,
+    isModeratingMembers,
     isChangingPresence,
     errorMessage,
     channelsErrorMessage,
     serverUpdateErrorMessage,
     inviteLinkErrorMessage,
     deleteServerErrorMessage,
+    membersErrorMessage,
+    moderationErrorMessage,
     presenceErrorMessage,
     presenceMembers,
+    members,
     activeVoicePresence,
     screenShareStates,
     screenShareStreams,
@@ -975,6 +1106,9 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     loadInviteLink,
     regenerateInviteLink,
     deleteSelectedServer,
+    loadMembers,
+    kickMember,
+    banMember,
     applyLiveServerUpdated,
     applyLiveChannelsUpdated,
     applyPresenceUpdated,
@@ -989,11 +1123,15 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     replaceScreenShareStreams,
     clearScreenShareStreams,
     handleScreenShareCaptureFailure,
+    handleServerAccessRevoked,
+    handleForcedDisconnect,
     clearCurrentUserPresenceLocally,
     clearChannelsError,
     clearServerUpdateError,
     clearInviteLinkError,
     clearDeleteServerError,
+    clearMembersError,
+    clearModerationError,
     clearPresenceError,
     reset,
   };
@@ -1052,6 +1190,28 @@ function toDeleteServerErrorMessage(error: unknown): string {
   }
 
   return "Не удалось удалить сервер.";
+}
+
+/**
+ * Приводит неизвестную ошибку загрузки server members к читаемому сообщению.
+ */
+function toMembersErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Не удалось загрузить список участников сервера.";
+}
+
+/**
+ * Приводит неизвестную ошибку moderation-действия к читаемому сообщению.
+ */
+function toModerationErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "Не удалось выполнить действие модерации.";
 }
 
 /**

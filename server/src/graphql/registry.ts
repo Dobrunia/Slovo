@@ -6,9 +6,11 @@ import {
 } from '../config/constants.js';
 import { createServerMutation } from './operations/create-server.js';
 import { createVoiceChannelMutation } from './operations/create-voice-channel.js';
+import { banServerMemberMutation } from './operations/ban-server-member.js';
 import { deleteServerMutation } from './operations/delete-server.js';
 import { deleteVoiceChannelMutation } from './operations/delete-voice-channel.js';
 import { healthQuery } from './operations/health.js';
+import { kickServerMemberMutation } from './operations/kick-server-member.js';
 import { meQuery } from './operations/me.js';
 import { myServersQuery } from './operations/my-servers.js';
 import { loginMutation } from './operations/login.js';
@@ -16,6 +18,7 @@ import { joinServerMutation } from './operations/join-server.js';
 import { reorderVoiceChannelsMutation } from './operations/reorder-voice-channels.js';
 import { registerMutation } from './operations/register.js';
 import { searchPublicServersQuery } from './operations/search-public-servers.js';
+import { serverMembersQuery } from './operations/server-members.js';
 import { serverSnapshotQuery } from './operations/server-snapshot.js';
 import { serverPresenceSnapshotQuery } from './operations/server-presence-snapshot.js';
 import { serverInviteLinkQuery } from './operations/server-invite-link.js';
@@ -33,6 +36,7 @@ export const queries = [
   meQuery,
   myServersQuery,
   searchPublicServersQuery,
+  serverMembersQuery,
   serverSnapshotQuery,
   serverPresenceSnapshotQuery,
   serverInviteLinkQuery,
@@ -46,6 +50,8 @@ export const mutations = [
   loginMutation,
   joinServerMutation,
   createServerMutation,
+  kickServerMemberMutation,
+  banServerMemberMutation,
   deleteServerMutation,
   createVoiceChannelMutation,
   updateVoiceChannelMutation,

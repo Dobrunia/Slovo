@@ -409,6 +409,7 @@ export function createAuthTestDataLayer() {
           };
           include?: {
             server?: boolean;
+            user?: boolean;
           };
         }) => {
           const filteredMembers = serverMembers.filter(
@@ -417,10 +418,15 @@ export function createAuthTestDataLayer() {
               (args?.where?.serverId === undefined || member.serverId === args.where.serverId),
           );
 
-          const enrichedMembers = filteredMembers.map((member) => ({
-            ...member,
-            server: servers.find((server) => server.id === member.serverId) ?? null,
-          }));
+          const enrichedMembers = filteredMembers.map((member) => {
+            const enrichedMember = {
+              ...member,
+              server: servers.find((server) => server.id === member.serverId) ?? null,
+              user: users.find((user) => user.id === member.userId) ?? null,
+            };
+
+            return enrichedMember;
+          });
 
           const updatedAtOrder = args?.orderBy?.server?.updatedAt;
 
@@ -433,9 +439,47 @@ export function createAuthTestDataLayer() {
             });
           }
 
-          return args?.include?.server
-            ? enrichedMembers
-            : enrichedMembers.map(({ server, ...member }) => member);
+          if (args?.include?.server || args?.include?.user) {
+            return enrichedMembers.map((member) => {
+              const nextMember: Record<string, unknown> = {
+                ...member,
+              };
+
+              if (!args?.include?.server) {
+                delete nextMember.server;
+              }
+
+              if (!args?.include?.user) {
+                delete nextMember.user;
+              }
+
+              return nextMember;
+            });
+          }
+
+          return enrichedMembers.map(({ server, user, ...member }) => member);
+        },
+        delete: async (args: {
+          where: {
+            serverId_userId: {
+              serverId: string;
+              userId: string;
+            };
+          };
+        }) => {
+          const memberIndex = serverMembers.findIndex(
+            (storedMember) =>
+              storedMember.serverId === args.where.serverId_userId.serverId &&
+              storedMember.userId === args.where.serverId_userId.userId,
+          );
+
+          if (memberIndex < 0) {
+            throw new Error("ServerMember not found");
+          }
+
+          const [removedMember] = serverMembers.splice(memberIndex, 1);
+
+          return removedMember;
         },
       },
       voiceChannel: {
@@ -566,6 +610,17 @@ export function createAuthTestDataLayer() {
               serverBan.serverId === args.where.serverId_userId.serverId &&
               serverBan.userId === args.where.serverId_userId.userId,
           ) ?? null,
+        findMany: async (args?: {
+          where?: {
+            serverId?: string;
+            userId?: string;
+          };
+        }) =>
+          serverBans.filter(
+            (serverBan) =>
+              (args?.where?.serverId === undefined || serverBan.serverId === args.where.serverId) &&
+              (args?.where?.userId === undefined || serverBan.userId === args.where.userId),
+          ),
       },
       $disconnect: async () => undefined,
     },

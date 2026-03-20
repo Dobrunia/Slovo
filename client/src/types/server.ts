@@ -152,6 +152,16 @@ export interface ClientServerUpdatedEventPayload {
 }
 
 /**
+ * Live-payload изменения доступности сервера для конкретного пользователя.
+ */
+export interface ClientUserServersUpdatedEventPayload {
+  userId: string;
+  serverId: string;
+  action: "created" | "joined" | "deleted";
+  occurredAt: string;
+}
+
+/**
  * Live-payload обновления структуры каналов сервера.
  */
 export interface ClientChannelsUpdatedEventPayload {
@@ -194,6 +204,24 @@ export interface ClientPresenceUpdatedEventPayload {
  */
 export interface ClientServerPresenceSnapshot {
   members: ClientRuntimePresenceMember[];
+}
+
+/**
+ * Публичная форма участника сервера для owner-only moderation UI.
+ */
+export interface ClientServerMember {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+  role: ServerMembershipRole;
+}
+
+/**
+ * Snapshot участников сервера для owner-only moderation UI.
+ */
+export interface ClientServerMembersSnapshot {
+  serverId: string;
+  members: ClientServerMember[];
 }
 
 /**
@@ -247,6 +275,24 @@ export interface ClientScreenShareUpdatedEventPayload {
   channelId: string;
   active: boolean;
   occurredAt: string;
+}
+
+/**
+ * Live-payload принудительного disconnect пользователя из active voice presence.
+ */
+export interface ClientForcedDisconnectEventPayload {
+  serverId: string;
+  userId: string;
+  reason: string;
+  occurredAt: string;
+}
+
+/**
+ * Результат успешного moderation-действия над участником сервера.
+ */
+export interface ClientModerationResult {
+  serverId: string;
+  userId: string;
 }
 
 /**

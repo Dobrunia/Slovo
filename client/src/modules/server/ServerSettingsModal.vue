@@ -28,6 +28,7 @@ const copyResetTimeoutId = ref<number | null>(null);
 
 const currentServer = computed(() => serverModuleStore.snapshot?.server ?? null);
 const currentChannels = computed(() => serverModuleStore.snapshot?.channels ?? []);
+const currentMembers = computed(() => serverModuleStore.members);
 const currentInviteLink = computed(() => serverModuleStore.inviteLink?.inviteLink ?? '');
 const previewName = computed(() => {
   const normalizedValue = draftName.value.trim();
@@ -85,10 +86,13 @@ function syncDraftWithCurrentServer(): void {
   serverModuleStore.clearServerUpdateError();
   serverModuleStore.clearInviteLinkError();
   serverModuleStore.clearDeleteServerError();
+  serverModuleStore.clearMembersError();
+  serverModuleStore.clearModerationError();
   isCopySucceeded.value = false;
 
   if (canManageServer.value) {
     void serverModuleStore.loadInviteLink().catch(() => undefined);
+    void serverModuleStore.loadMembers().catch(() => undefined);
   }
 }
 
@@ -279,6 +283,36 @@ async function handleDeleteServer(): Promise<void> {
   try {
     await serverModuleStore.deleteSelectedServer();
     closeModal();
+  } catch {
+    // Ошибка уже нормализована в store и показана в модалке.
+  }
+}
+
+/**
+ * Исключает участника из текущего сервера через owner-only moderation API.
+ */
+async function handleKickMember(targetUserId: string): Promise<void> {
+  if (!canManageServer.value) {
+    return;
+  }
+
+  try {
+    await serverModuleStore.kickMember(targetUserId);
+  } catch {
+    // Ошибка уже нормализована в store и показана в модалке.
+  }
+}
+
+/**
+ * Блокирует участника в текущем сервере через owner-only moderation API.
+ */
+async function handleBanMember(targetUserId: string): Promise<void> {
+  if (!canManageServer.value) {
+    return;
+  }
+
+  try {
+    await serverModuleStore.banMember(targetUserId);
   } catch {
     // Ошибка уже нормализована в store и показана в модалке.
   }
@@ -481,6 +515,83 @@ function buildReorderedChannelIds(channelId: string, direction: -1 | 1): string[
       </p>
     </section>
 
+    <section v-if="canManageServer" class="server-settings-modal__member-section">
+      <AppHeadingBlock
+        title="Участники"
+        description="Владелец может исключать и блокировать участников текущего сервера."
+        title-size="base"
+      />
+
+      <p
+        v-if="serverModuleStore.membersErrorMessage"
+        class="server-settings-modal__server-error dbru-text-sm"
+      >
+        {{ serverModuleStore.membersErrorMessage }}
+      </p>
+
+      <p
+        v-if="serverModuleStore.moderationErrorMessage"
+        class="server-settings-modal__server-error dbru-text-sm"
+      >
+        {{ serverModuleStore.moderationErrorMessage }}
+      </p>
+
+      <div v-if="serverModuleStore.isLoadingMembers" class="dbru-text-sm dbru-text-muted">
+        Загружаем участников...
+      </div>
+
+      <div v-else-if="currentMembers.length > 0" class="server-settings-modal__member-list">
+        <article
+          v-for="member in currentMembers"
+          :key="member.userId"
+          class="server-settings-modal__member-card"
+        >
+          <div class="server-settings-modal__member-main">
+            <DbrAvatar
+              size="sm"
+              shape="rounded"
+              :name="member.displayName"
+              :src="member.avatarUrl ?? undefined"
+            />
+
+            <div class="server-settings-modal__member-text">
+              <p class="server-settings-modal__member-name dbru-text-sm dbru-text-main">
+                {{ member.displayName }}
+              </p>
+              <p class="server-settings-modal__member-role dbru-text-xs dbru-text-muted">
+                {{ member.role === 'OWNER' ? 'Владелец' : 'Участник' }}
+              </p>
+            </div>
+          </div>
+
+          <div v-if="member.role !== 'OWNER'" class="server-settings-modal__member-actions">
+            <DbrButton
+              :disabled="serverModuleStore.isModeratingMembers"
+              :loading="serverModuleStore.isModeratingMembers"
+              :native-type="'button'"
+              @click="handleKickMember(member.userId)"
+            >
+              Исключить
+            </DbrButton>
+
+            <DbrButton
+              :disabled="serverModuleStore.isModeratingMembers"
+              :loading="serverModuleStore.isModeratingMembers"
+              :native-type="'button'"
+              variant="danger"
+              @click="handleBanMember(member.userId)"
+            >
+              Заблокировать
+            </DbrButton>
+          </div>
+        </article>
+      </div>
+
+      <p v-else class="server-settings-modal__channels-empty dbru-text-sm dbru-text-muted">
+        Участников пока нет.
+      </p>
+    </section>
+
     <footer class="server-settings-modal__footer">
       <p
         v-if="serverModuleStore.deleteServerErrorMessage"
@@ -539,6 +650,11 @@ function buildReorderedChannelIds(channelId: string, direction: -1 | 1): string[
   gap: var(--dbru-space-4);
 }
 
+.server-settings-modal__member-section {
+  display: grid;
+  gap: var(--dbru-space-4);
+}
+
 .server-settings-modal__channel-create {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -555,9 +671,25 @@ function buildReorderedChannelIds(channelId: string, direction: -1 | 1): string[
   gap: var(--dbru-space-3);
 }
 
+.server-settings-modal__member-list {
+  display: grid;
+  gap: var(--dbru-space-3);
+}
+
 .server-settings-modal__channel-card {
   display: grid;
   gap: var(--dbru-space-3);
+  padding: var(--dbru-space-4);
+  border: var(--dbru-border-size-1) solid var(--dbru-color-border);
+  border-radius: var(--dbru-radius-md);
+  background: var(--dbru-color-bg);
+}
+
+.server-settings-modal__member-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--dbru-space-3);
+  align-items: center;
   padding: var(--dbru-space-4);
   border: var(--dbru-border-size-1) solid var(--dbru-color-border);
   border-radius: var(--dbru-radius-md);
@@ -568,10 +700,35 @@ function buildReorderedChannelIds(channelId: string, direction: -1 | 1): string[
   min-width: 0;
 }
 
+.server-settings-modal__member-main {
+  display: flex;
+  align-items: center;
+  gap: var(--dbru-space-3);
+  min-width: 0;
+}
+
+.server-settings-modal__member-text {
+  display: grid;
+  gap: var(--dbru-space-1);
+  min-width: 0;
+}
+
+.server-settings-modal__member-name,
+.server-settings-modal__member-role {
+  margin: 0;
+}
+
 .server-settings-modal__channel-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--dbru-space-2);
+}
+
+.server-settings-modal__member-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--dbru-space-2);
+  justify-content: flex-end;
 }
 
 .server-settings-modal__channels-error {
@@ -621,6 +778,10 @@ function buildReorderedChannelIds(channelId: string, direction: -1 | 1): string[
   }
 
   .server-settings-modal__channel-create {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .server-settings-modal__member-card {
     grid-template-columns: minmax(0, 1fr);
   }
 
