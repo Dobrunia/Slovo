@@ -6,6 +6,7 @@ import { resetActiveVoiceSession, syncActiveVoiceSession } from "../realtime/voi
 import { useAuthStore } from "../stores/auth";
 import { useServerModuleStore } from "../stores/serverModule";
 import { useAppSounds } from "./useAppSounds";
+import { useUserPreferences } from "./useUserPreferences";
 
 interface UseHomePageRealtimeOptions {
   selectedServerId: {
@@ -24,6 +25,7 @@ export function useHomePageRealtime({
   serverModuleStore,
 }: UseHomePageRealtimeOptions): void {
   const { playJoinChannelSound, playLeaveChannelSound } = useAppSounds();
+  const { selectedInputDeviceId } = useUserPreferences();
   let stopServerLiveSubscription: (() => void) | null = null;
   let requestedServerLiveSubscriptionTarget: string | null = null;
   let activeServerLiveSubscriptionTarget: string | null = null;
@@ -46,16 +48,42 @@ export function useHomePageRealtime({
       () => serverModuleStore.currentUserPresence?.channelId ?? null,
       () => serverModuleStore.currentVoiceState.muted,
       () => serverModuleStore.currentVoiceState.deafened,
+      () => Boolean(serverModuleStore.currentUserScreenShareState),
+      () => selectedInputDeviceId.value,
     ],
-    ([sessionToken, currentUserId]) => {
+    ([
+      sessionToken,
+      currentUserId,
+      _serverId,
+      _channelId,
+      _muted,
+      _deafened,
+      screenShareActive,
+      inputDeviceId,
+    ]) => {
       void syncActiveVoiceSession({
         sessionToken,
         currentUserId,
         serverId: serverModuleStore.currentUserPresence?.serverId ?? null,
         presence: serverModuleStore.currentUserPresence,
+        inputDeviceId,
+        screenShareActive,
         voiceState: serverModuleStore.currentVoiceState,
         onVoiceStateUpdated: (payload) => {
           serverModuleStore.applyVoiceStateUpdated(payload);
+        },
+        onScreenShareUpdated: (payload) => {
+          serverModuleStore.applyScreenShareUpdated(payload);
+        },
+        onScreenShareStreamsChanged: (streams) => {
+          serverModuleStore.replaceScreenShareStreams(streams);
+        },
+        onScreenShareCaptureFailed: async (error) => {
+          serverModuleStore.presenceErrorMessage =
+            error instanceof Error && error.message
+              ? error.message
+              : "Не удалось запустить демонстрацию экрана.";
+          await serverModuleStore.handleScreenShareCaptureFailure();
         },
         onError: (error) => {
           serverModuleStore.presenceErrorMessage =
@@ -178,6 +206,7 @@ export function useHomePageRealtime({
     }
 
     serverModuleStore.clearCurrentUserPresenceLocally(currentPresence.serverId);
+    serverModuleStore.clearScreenShareStreams();
     resetActiveVoiceSession();
   }
 
@@ -191,6 +220,7 @@ export function useHomePageRealtime({
       serverModuleStore.clearCurrentUserPresenceLocally(currentPresence.serverId);
     }
 
+    serverModuleStore.clearScreenShareStreams();
     teardownServerLiveSubscription();
     resetActiveVoiceSession();
     resetRealtimeRuntime();

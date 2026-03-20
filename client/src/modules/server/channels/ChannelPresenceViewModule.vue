@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import globalBack from "../../../assets/global_back.png";
+import { useAuthStore } from "../../../stores/auth";
 import ChannelMemberCard from "./ChannelMemberCard.vue";
+import ChannelScreenShareCard from "./ChannelScreenShareCard.vue";
 import { useServerModuleStore } from "../../../stores/serverModule";
 
 const props = defineProps<{
   selectedChannelId: string | null;
 }>();
 
+const authStore = useAuthStore();
 const serverModuleStore = useServerModuleStore();
 
 /**
@@ -44,6 +47,42 @@ const selectedChannelMembers = computed(() => {
 const selectedServerName = computed(
   () => serverModuleStore.snapshot?.server.name ?? "Сервер",
 );
+
+/**
+ * Возвращает готовые к рендеру демонстрации экрана активного канала.
+ */
+const selectedChannelScreenShares = computed(() => {
+  if (
+    !props.selectedChannelId ||
+    !serverModuleStore.currentUserPresence ||
+    serverModuleStore.currentUserPresence.channelId !== props.selectedChannelId ||
+    serverModuleStore.currentUserPresence.serverId !== serverModuleStore.selectedServerId
+  ) {
+    return [];
+  }
+
+  return serverModuleStore.screenShareStreams.map((screenShareStream) => {
+    const currentUser = authStore.currentUser;
+    const participant =
+      currentUser?.id === screenShareStream.userId
+        ? {
+            displayName: currentUser.displayName,
+            avatarUrl: currentUser.avatarUrl ?? null,
+          }
+        : (selectedChannelMembers.value.find(
+            (member) => member.userId === screenShareStream.userId,
+          ) ?? {
+            displayName: "Участник",
+            avatarUrl: null,
+          });
+
+    return {
+      ...screenShareStream,
+      displayName: participant.displayName,
+      avatarUrl: participant.avatarUrl,
+    };
+  });
+});
 </script>
 
 <template>
@@ -68,6 +107,20 @@ const selectedServerName = computed(
             {{ selectedServerName }}
           </p>
         </header>
+
+        <div
+          v-if="selectedChannelScreenShares.length > 0"
+          class="channel-presence-view-module__screen-shares"
+        >
+          <ChannelScreenShareCard
+            v-for="screenShare in selectedChannelScreenShares"
+            :key="screenShare.userId"
+            :display-name="screenShare.displayName"
+            :avatar-url="screenShare.avatarUrl"
+            :stream="screenShare.stream"
+            :is-current-user="screenShare.isCurrentUser"
+          />
+        </div>
 
         <div
           v-if="selectedChannelMembers.length > 0"
@@ -169,6 +222,11 @@ const selectedServerName = computed(
   gap: var(--dbru-space-3);
   min-height: 0;
   overflow: auto;
+}
+
+.channel-presence-view-module__screen-shares {
+  display: grid;
+  gap: var(--dbru-space-3);
 }
 
 .channel-presence-view-module__empty {

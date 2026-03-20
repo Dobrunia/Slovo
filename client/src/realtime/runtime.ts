@@ -5,6 +5,7 @@ import { slovoRealtimeRegistry } from "./contracts";
 import type {
   ClientPresenceUpdatedEventPayload,
   ClientChannelsUpdatedEventPayload,
+  ClientScreenShareUpdatedEventPayload,
   ClientServerUpdatedEventPayload,
   ClientVoiceSessionSignaledEventPayload,
   ClientVoiceStateUpdatedEventPayload,
@@ -37,6 +38,7 @@ type VoiceSessionSubscriptionInput = {
   serverId: string;
   channelId: string;
   onVoiceStateUpdated: (payload: ClientVoiceStateUpdatedEventPayload) => void;
+  onScreenShareUpdated: (payload: ClientScreenShareUpdatedEventPayload) => void;
 };
 
 let runtime: SlovoRealtimeRuntime | null = null;
@@ -156,11 +158,20 @@ export async function subscribeToVoiceSession(
       input.onVoiceStateUpdated(payload);
     }
   });
+  const stopScreenShareUpdated = currentRuntime.onEvent("screen-share.updated", (payload) => {
+    if (
+      payload.serverId === input.serverId &&
+      payload.channelId === input.channelId
+    ) {
+      input.onScreenShareUpdated(payload);
+    }
+  });
 
   await currentRuntime.subscribeChannel("voice.session", channelKey);
 
   return async () => {
     stopVoiceStateUpdated();
+    stopScreenShareUpdated();
     await currentRuntime.unsubscribeChannel("voice.session", channelKey);
   };
 }
@@ -248,6 +259,24 @@ export async function executeSetSelfDeafenCommand(input: {
     serverId: input.serverId,
     channelId: input.channelId,
     deafened: input.deafened,
+  });
+}
+
+/**
+ * Выполняет realtime-команду изменения состояния демонстрации экрана.
+ */
+export async function executeSetScreenShareActiveCommand(input: {
+  sessionToken: string | null;
+  serverId: string;
+  channelId: string;
+  active: boolean;
+}) {
+  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
+
+  return currentRuntime.executeCommand("voice.set-screen-share-active", {
+    serverId: input.serverId,
+    channelId: input.channelId,
+    active: input.active,
   });
 }
 

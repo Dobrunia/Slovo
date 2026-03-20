@@ -11,11 +11,14 @@ import headphonesOffIcon from "../../assets/icons/headphones-off.svg";
 import micIcon from "../../assets/icons/mic.svg";
 import micOffIcon from "../../assets/icons/mic-off.svg";
 import phoneDownIcon from "../../assets/icons/phone-down.svg";
+import screenShareIcon from "../../assets/icons/screen-share.svg";
+import screenShareOffIcon from "../../assets/icons/screen-share-off.svg";
 
 const router = useRouter();
 const authStore = useAuthStore();
 const serverModuleStore = useServerModuleStore();
 const isVoiceControlSubmitting = ref(false);
+const isScreenShareSubmitting = ref(false);
 
 /**
  * Отображаемое имя текущего пользователя.
@@ -41,6 +44,7 @@ const isMicrophoneMuted = computed(
     serverModuleStore.currentVoiceState.muted || serverModuleStore.currentVoiceState.deafened,
 );
 const isHeadphonesMuted = computed(() => serverModuleStore.currentVoiceState.deafened);
+const isScreenShareActive = computed(() => Boolean(serverModuleStore.currentUserScreenShareState));
 
 /**
  * Выводит пользователя из текущего канала и возвращает URL к серверу без channel route.
@@ -95,6 +99,25 @@ async function handleToggleHeadphones(): Promise<void> {
     isVoiceControlSubmitting.value = false;
   }
 }
+
+/**
+ * Переключает демонстрацию экрана для текущего активного канала.
+ */
+async function handleToggleScreenShare(): Promise<void> {
+  if (!serverModuleStore.currentUserPresence || isScreenShareSubmitting.value) {
+    return;
+  }
+
+  isScreenShareSubmitting.value = true;
+
+  try {
+    await serverModuleStore.setScreenShareActive(!isScreenShareActive.value);
+  } catch {
+    // Ошибка уже отражена в store.
+  } finally {
+    isScreenShareSubmitting.value = false;
+  }
+}
 </script>
 
 <template>
@@ -122,6 +145,14 @@ async function handleToggleHeadphones(): Promise<void> {
           icon-alt=""
           tone="danger"
           @click="handleLeaveChannel"
+        />
+        <AppIconButton
+          v-if="hasActiveChannelPresence"
+          :icon-src="isScreenShareActive ? screenShareOffIcon : screenShareIcon"
+          :label="isScreenShareActive ? 'Остановить демонстрацию экрана' : 'Начать демонстрацию экрана'"
+          icon-alt=""
+          :tone="isScreenShareActive ? 'danger' : 'default'"
+          @click="handleToggleScreenShare"
         />
       </div>
     </div>
@@ -187,7 +218,7 @@ async function handleToggleHeadphones(): Promise<void> {
 }
 
 .current-user-control-module__session-actions {
-  min-width: 2.5rem;
+  min-width: 0;
 }
 
 @media (max-width: 768px) {

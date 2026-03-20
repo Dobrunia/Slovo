@@ -228,3 +228,32 @@ export interface ClientCurrentVoiceState {
   muted: boolean;
   deafened: boolean;
 }
+
+/**
+ * Runtime-форма активной демонстрации экрана внутри канала.
+ */
+export interface ClientRuntimeScreenShareState {
+  userId: string;
+  serverId: string;
+  channelId: string;
+}
+
+/**
+ * Live-payload изменения состояния демонстрации экрана.
+ */
+export interface ClientScreenShareUpdatedEventPayload {
+  serverId: string;
+  userId: string;
+  channelId: string;
+  active: boolean;
+  occurredAt: string;
+}
+
+/**
+ * Локально доступный screen-share stream текущей voice session.
+ */
+export interface ClientVoiceScreenShareStream {
+  userId: string;
+  stream: MediaStream;
+  isCurrentUser: boolean;
+}

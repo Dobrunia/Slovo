@@ -18,7 +18,13 @@ const emit = defineEmits<{
 const router = useRouter();
 const authStore = useAuthStore();
 const serversStore = useServersStore();
-const { isSoundEnabled } = useUserPreferences();
+const {
+  isSoundEnabled,
+  selectedInputDeviceId,
+  audioInputDevices,
+  isRefreshingAudioInputDevices,
+  refreshAudioInputDevices,
+} = useUserPreferences();
 
 const profileName = computed(() => authStore.currentUser?.displayName ?? "Пользователь");
 const profileHandle = computed(() =>
@@ -28,6 +34,7 @@ const profileEmail = computed(() => authStore.currentUser?.email ?? "Email не 
 const draftDisplayName = ref("");
 const draftAvatarUrl = ref("");
 const draftIsSoundEnabled = ref(false);
+const draftSelectedInputDeviceId = ref<string | null>(null);
 
 const previewName = computed(() => {
   const normalizedName = draftDisplayName.value.trim();
@@ -46,14 +53,17 @@ function syncDraftWithCurrentUser(): void {
   draftDisplayName.value = authStore.currentUser?.displayName ?? "";
   draftAvatarUrl.value = authStore.currentUser?.avatarUrl ?? "";
   draftIsSoundEnabled.value = isSoundEnabled.value;
+  draftSelectedInputDeviceId.value = selectedInputDeviceId.value;
   authStore.clearProfileError();
 }
 
 watch(
   () => props.isOpen,
-  (isOpen) => {
+  async (isOpen) => {
     if (isOpen) {
       syncDraftWithCurrentUser();
+      await refreshAudioInputDevices();
+      draftSelectedInputDeviceId.value = selectedInputDeviceId.value;
     }
   },
   { immediate: true },
@@ -69,6 +79,7 @@ async function handleSaveProfile(): Promise<void> {
       avatarUrl: draftAvatarUrl.value,
     });
     isSoundEnabled.value = draftIsSoundEnabled.value;
+    selectedInputDeviceId.value = draftSelectedInputDeviceId.value;
     emit("close");
   } catch {
     // Ошибка уже отражена в store и показана в модальном окне.
@@ -141,6 +152,26 @@ function normalizeDraftAvatarUrl(value: string): string | null {
         label="Включить звуки"
       />
 
+      <label class="settings-modal__device-field">
+        <span class="settings-modal__device-label dbru-text-sm dbru-text-muted">
+          Микрофон
+        </span>
+        <select
+          v-model="draftSelectedInputDeviceId"
+          class="settings-modal__device-select dbru-text-base dbru-text-main"
+          :disabled="isRefreshingAudioInputDevices"
+        >
+          <option :value="null">Системный по умолчанию</option>
+          <option
+            v-for="device in audioInputDevices"
+            :key="device.id"
+            :value="device.id"
+          >
+            {{ device.label }}
+          </option>
+        </select>
+      </label>
+
       <p
         v-if="authStore.profileErrorMessage"
         class="settings-modal__error dbru-text-sm dbru-text-main"
@@ -187,6 +218,37 @@ function normalizeDraftAvatarUrl(value: string): string | null {
 .settings-modal__form {
   display: grid;
   gap: var(--dbru-space-3);
+}
+
+.settings-modal__device-field {
+  display: grid;
+  gap: var(--dbru-space-2);
+}
+
+.settings-modal__device-label {
+  margin: 0;
+}
+
+.settings-modal__device-select {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: var(--dbru-border-size-1) solid var(--dbru-color-border);
+  border-radius: var(--dbru-radius-md);
+  background-color: var(--dbru-color-surface);
+  color: var(--dbru-color-text);
+  padding: var(--dbru-space-3) var(--dbru-space-4);
+  min-height: var(--dbru-control-height-md);
+  outline: none;
+}
+
+.settings-modal__device-select:focus {
+  border-color: var(--dbru-color-primary);
+}
+
+.settings-modal__device-select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .settings-modal__error {

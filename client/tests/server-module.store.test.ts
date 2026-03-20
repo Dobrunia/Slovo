@@ -12,6 +12,7 @@ const realtimeMocks = vi.hoisted(() => ({
   move: vi.fn(),
   setSelfMute: vi.fn(),
   setSelfDeafen: vi.fn(),
+  setScreenShareActive: vi.fn(),
 }));
 
 vi.mock("../src/realtime/runtime", () => ({
@@ -20,6 +21,7 @@ vi.mock("../src/realtime/runtime", () => ({
   executeMoveVoiceChannelCommand: realtimeMocks.move,
   executeSetSelfMuteCommand: realtimeMocks.setSelfMute,
   executeSetSelfDeafenCommand: realtimeMocks.setSelfDeafen,
+  executeSetScreenShareActiveCommand: realtimeMocks.setScreenShareActive,
 }));
 
 const testUser: ClientUser = {
@@ -39,6 +41,7 @@ describe("server module store", () => {
     realtimeMocks.move.mockReset();
     realtimeMocks.setSelfMute.mockReset();
     realtimeMocks.setSelfDeafen.mockReset();
+    realtimeMocks.setScreenShareActive.mockReset();
   });
 
   /**
@@ -978,6 +981,115 @@ describe("server module store", () => {
       serverId: "server-1",
       channelId: "channel-1",
       deafened: true,
+    });
+  });
+
+  /**
+   * Проверяется, что live-события screen share обновляют runtime state и очищают
+   * локальные stream-ы пользователя при остановке демонстрации.
+   * Это важно, потому что UI центральной области и control panel опираются
+   * именно на server-authoritative screen-share состояние, а не на локальные ref-флаги.
+   * Граничные случаи: сначала share включается, затем выключается тем же пользователем,
+   * и store должен удалить и состояние, и stream без полного reset модуля.
+   */
+  test("should apply live screen share updates and clear matching streams on stop", () => {
+    const serverModuleStore = useServerModuleStore();
+    const localStream = {} as MediaStream;
+    const remoteStream = {} as MediaStream;
+
+    serverModuleStore.replaceScreenShareStreams([
+      {
+        userId: "user-1",
+        stream: localStream,
+        isCurrentUser: true,
+      },
+      {
+        userId: "user-2",
+        stream: remoteStream,
+        isCurrentUser: false,
+      },
+    ]);
+
+    serverModuleStore.applyScreenShareUpdated({
+      serverId: "server-1",
+      userId: "user-1",
+      channelId: "channel-1",
+      active: true,
+      occurredAt: "2026-03-20T12:00:00.000Z",
+    });
+
+    expect(serverModuleStore.currentUserScreenShareState).toBeNull();
+
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+
+    expect(serverModuleStore.currentUserScreenShareState).toEqual({
+      userId: "user-1",
+      serverId: "server-1",
+      channelId: "channel-1",
+    });
+
+    serverModuleStore.applyScreenShareUpdated({
+      serverId: "server-1",
+      userId: "user-1",
+      channelId: "channel-1",
+      active: false,
+      occurredAt: "2026-03-20T12:01:00.000Z",
+    });
+
+    expect(serverModuleStore.currentUserScreenShareState).toBeNull();
+    expect(serverModuleStore.screenShareStreams).toEqual([
+      {
+        userId: "user-2",
+        stream: remoteStream,
+        isCurrentUser: false,
+      },
+    ]);
+  });
+
+  /**
+   * Проверяется, что store отправляет отдельную realtime-команду для включения
+   * демонстрации экрана и локально отражает успешный server-authoritative toggle.
+   * Это важно, потому что screen share теперь управляется не напрямую mediasoup-сессией,
+   * а через LiveRail-команду с последующей синхронизацией состояния.
+   * Граничные случаи: пользователь уже находится в активном канале,
+   * поэтому store должен взять serverId/channelId из текущего presence.
+   */
+  test("should execute the screen share command for the current presence", async () => {
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+    authStore.sessionToken = "active-session-token";
+    authStore.status = "authenticated";
+    authStore.isInitialized = true;
+
+    const serverModuleStore = useServerModuleStore();
+    serverModuleStore.selectedServerId = "server-1";
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-20T12:00:00.000Z",
+      },
+      previousChannelId: null,
+      action: "joined",
+      occurredAt: "2026-03-20T12:00:00.000Z",
+    });
+
+    await serverModuleStore.setScreenShareActive(true);
+
+    expect(realtimeMocks.setScreenShareActive).toHaveBeenCalledWith({
+      sessionToken: "active-session-token",
+      serverId: "server-1",
+      channelId: "channel-1",
+      active: true,
+    });
+    expect(serverModuleStore.currentUserScreenShareState).toEqual({
+      userId: "user-1",
+      serverId: "server-1",
+      channelId: "channel-1",
     });
   });
 

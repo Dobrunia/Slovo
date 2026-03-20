@@ -13,7 +13,9 @@ import {
 import type {
   ClientActiveVoicePresence,
   ClientCurrentVoiceState,
+  ClientScreenShareUpdatedEventPayload,
   ClientVoiceSessionSignaledEventPayload,
+  ClientVoiceScreenShareStream,
   ClientVoiceStateUpdatedEventPayload,
 } from "../types/server";
 
@@ -24,9 +26,14 @@ type PendingSignalRequest = {
   timeoutId: number;
 };
 
+type MediaType = "audio" | "screen";
+
 type RemoteConsumerRecord = {
   consumer: Consumer;
-  audioElement: HTMLAudioElement;
+  producerUserId: string;
+  mediaType: MediaType;
+  stream: MediaStream;
+  audioElement: HTMLAudioElement | null;
 };
 
 /**
@@ -37,8 +44,13 @@ export interface SyncActiveVoiceSessionInput {
   currentUserId: string | null;
   serverId: string | null;
   presence: ClientActiveVoicePresence | null;
+  inputDeviceId: string | null;
+  screenShareActive: boolean;
   voiceState: ClientCurrentVoiceState;
   onVoiceStateUpdated(payload: ClientVoiceStateUpdatedEventPayload): void;
+  onScreenShareUpdated(payload: ClientScreenShareUpdatedEventPayload): void;
+  onScreenShareStreamsChanged(streams: ClientVoiceScreenShareStream[]): void;
+  onScreenShareCaptureFailed(error: unknown): Promise<void> | void;
   onError(error: unknown): void;
 }
 
@@ -68,7 +80,9 @@ export async function syncActiveVoiceSession(
     activeVoiceSession &&
     activeVoiceSessionTargetKey === nextTargetKey
   ) {
+    await activeVoiceSession.applyInputDevice(input.inputDeviceId);
     await activeVoiceSession.applyVoiceState(input.voiceState);
+    await activeVoiceSession.applyScreenShareActive(input.screenShareActive);
     return;
   }
 
@@ -81,8 +95,12 @@ export async function syncActiveVoiceSession(
 
   const voiceSession = new VoiceChannelSession({
     ...nextTarget,
+    initialInputDeviceId: input.inputDeviceId,
     initialVoiceState: input.voiceState,
     onVoiceStateUpdated: input.onVoiceStateUpdated,
+    onScreenShareUpdated: input.onScreenShareUpdated,
+    onScreenShareStreamsChanged: input.onScreenShareStreamsChanged,
+    onScreenShareCaptureFailed: input.onScreenShareCaptureFailed,
   });
 
   activeVoiceSession = voiceSession;
@@ -97,6 +115,7 @@ export async function syncActiveVoiceSession(
     }
 
     await voiceSession.applyVoiceState(input.voiceState);
+    await voiceSession.applyScreenShareActive(input.screenShareActive);
   } catch (error) {
     if (currentVersion === voiceSessionVersion) {
       activeVoiceSession = null;
@@ -160,13 +179,20 @@ class VoiceChannelSession {
   private readonly serverId: string;
   private readonly channelId: string;
   private readonly onVoiceStateUpdated: SyncActiveVoiceSessionInput["onVoiceStateUpdated"];
+  private readonly onScreenShareUpdated: SyncActiveVoiceSessionInput["onScreenShareUpdated"];
+  private readonly onScreenShareStreamsChanged: SyncActiveVoiceSessionInput["onScreenShareStreamsChanged"];
+  private readonly onScreenShareCaptureFailed: SyncActiveVoiceSessionInput["onScreenShareCaptureFailed"];
   private stopVoiceSignalingSubscription: null | (() => Promise<void>) = null;
   private stopVoiceSessionSubscription: null | (() => Promise<void>) = null;
   private device: Device | null = null;
   private sendTransport: Transport | null = null;
   private recvTransport: Transport | null = null;
   private sendProducer: Producer | null = null;
+  private screenShareProducer: Producer | null = null;
   private microphoneTrack: MediaStreamTrack | null = null;
+  private screenShareTrack: MediaStreamTrack | null = null;
+  private localScreenShareStream: MediaStream | null = null;
+  private inputDeviceId: string | null;
   private currentVoiceState: ClientCurrentVoiceState;
   private destroyed = false;
 
@@ -178,16 +204,24 @@ class VoiceChannelSession {
     currentUserId: string;
     serverId: string;
     channelId: string;
+    initialInputDeviceId: string | null;
     initialVoiceState: ClientCurrentVoiceState;
     onVoiceStateUpdated: SyncActiveVoiceSessionInput["onVoiceStateUpdated"];
+    onScreenShareUpdated: SyncActiveVoiceSessionInput["onScreenShareUpdated"];
+    onScreenShareStreamsChanged: SyncActiveVoiceSessionInput["onScreenShareStreamsChanged"];
+    onScreenShareCaptureFailed: SyncActiveVoiceSessionInput["onScreenShareCaptureFailed"];
   }) {
     this.runtime = ensureRealtimeRuntime(input.sessionToken);
     this.sessionToken = input.sessionToken;
     this.currentUserId = input.currentUserId;
     this.serverId = input.serverId;
     this.channelId = input.channelId;
+    this.inputDeviceId = input.initialInputDeviceId;
     this.currentVoiceState = input.initialVoiceState;
     this.onVoiceStateUpdated = input.onVoiceStateUpdated;
+    this.onScreenShareUpdated = input.onScreenShareUpdated;
+    this.onScreenShareStreamsChanged = input.onScreenShareStreamsChanged;
+    this.onScreenShareCaptureFailed = input.onScreenShareCaptureFailed;
   }
 
   /**
@@ -216,6 +250,13 @@ class VoiceChannelSession {
           });
         }
       },
+      onScreenShareUpdated: (payload) => {
+        this.onScreenShareUpdated(payload);
+
+        if (payload.userId === this.currentUserId) {
+          void this.applyScreenShareActive(payload.active);
+        }
+      },
     });
 
     const routerRtpCapabilities = await this.requestSignal(
@@ -237,6 +278,7 @@ class VoiceChannelSession {
         producerId: string;
         producerUserId: string;
         kind: string;
+        mediaType: MediaType;
       }>;
     }>(
       "mediasoup.sync-producers.request",
@@ -268,12 +310,72 @@ class VoiceChannelSession {
     }
 
     for (const remoteConsumer of this.remoteConsumers.values()) {
+      if (remoteConsumer.mediaType !== "audio" || !remoteConsumer.audioElement) {
+        continue;
+      }
+
       remoteConsumer.audioElement.muted = nextState.deafened;
 
       if (!nextState.deafened) {
         void remoteConsumer.audioElement.play().catch(() => {});
       }
     }
+  }
+
+  /**
+   * Переключает микрофон текущей voice session без полного teardown transport-ов.
+   */
+  async applyInputDevice(nextInputDeviceId: string | null): Promise<void> {
+    if (this.destroyed || this.inputDeviceId === nextInputDeviceId) {
+      return;
+    }
+
+    this.inputDeviceId = nextInputDeviceId;
+
+    if (!this.sendTransport) {
+      return;
+    }
+
+    const microphoneTrack = await this.captureMicrophoneTrack(nextInputDeviceId);
+    const previousTrack = this.microphoneTrack;
+    this.microphoneTrack = microphoneTrack;
+
+    if (this.sendProducer) {
+      await this.sendProducer.replaceTrack({
+        track: microphoneTrack,
+      });
+    } else {
+      this.sendProducer = await this.sendTransport.produce({
+        track: microphoneTrack,
+        stopTracks: false,
+        appData: {
+          media: "audio",
+        },
+      });
+    }
+
+    previousTrack?.stop();
+    await this.applyVoiceState(this.currentVoiceState);
+  }
+
+  /**
+   * Запускает или останавливает локальную демонстрацию экрана без teardown voice session.
+   */
+  async applyScreenShareActive(nextActive: boolean): Promise<void> {
+    if (this.destroyed) {
+      return;
+    }
+
+    if (nextActive) {
+      if (this.screenShareProducer) {
+        return;
+      }
+
+      await this.startScreenSharePublishing();
+      return;
+    }
+
+    await this.stopScreenSharePublishing();
   }
 
   /**
@@ -310,6 +412,7 @@ class VoiceChannelSession {
       this.closeRemoteProducer(producerId);
     }
 
+    await this.stopScreenSharePublishing();
     this.sendProducer?.close();
     this.sendProducer = null;
     this.sendTransport?.close();
@@ -321,6 +424,8 @@ class VoiceChannelSession {
       this.microphoneTrack.stop();
       this.microphoneTrack = null;
     }
+
+    this.onScreenShareStreamsChanged([]);
   }
 
   /**
@@ -428,20 +533,7 @@ class VoiceChannelSession {
       throw new Error("Send transport не создан.");
     }
 
-    if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error("Браузер не поддерживает захват микрофона.");
-    }
-
-    const mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: false,
-    });
-    const microphoneTrack = mediaStream.getAudioTracks()[0];
-
-    if (!microphoneTrack) {
-      throw new Error("Не удалось получить аудиотрек микрофона.");
-    }
-
+    const microphoneTrack = await this.captureMicrophoneTrack(this.inputDeviceId);
     this.microphoneTrack = microphoneTrack;
     this.sendProducer = await this.sendTransport.produce({
       track: microphoneTrack,
@@ -450,6 +542,138 @@ class VoiceChannelSession {
         media: "audio",
       },
     });
+  }
+
+  /**
+   * Захватывает аудиотрек выбранного микрофона с fallback на системный девайс.
+   */
+  private async captureMicrophoneTrack(
+    inputDeviceId: string | null,
+  ): Promise<MediaStreamTrack> {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error("Браузер не поддерживает захват микрофона.");
+    }
+
+    const audioConstraints = inputDeviceId
+      ? {
+          deviceId: {
+            exact: inputDeviceId,
+          },
+        }
+      : true;
+
+    let mediaStream: MediaStream;
+
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+        video: false,
+      });
+    } catch (error) {
+      if (!inputDeviceId) {
+        throw error;
+      }
+
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: false,
+      });
+    }
+
+    const microphoneTrack = mediaStream.getAudioTracks()[0];
+
+    if (!microphoneTrack) {
+      throw new Error("Не удалось получить аудиотрек микрофона.");
+    }
+
+    return microphoneTrack;
+  }
+
+  /**
+   * Захватывает экран пользователя и публикует video producer демонстрации.
+   */
+  private async startScreenSharePublishing(): Promise<void> {
+    if (!this.sendTransport) {
+      return;
+    }
+
+    try {
+      const screenShareTrack = await this.captureScreenShareTrack();
+      screenShareTrack.onended = () => {
+        void this.handleLocalScreenShareEnded();
+      };
+
+      const localScreenShareStream = new MediaStream([screenShareTrack]);
+      const screenShareProducer = await this.sendTransport.produce({
+        track: screenShareTrack,
+        stopTracks: false,
+        appData: {
+          media: "screen",
+        },
+      });
+
+      this.screenShareTrack = screenShareTrack;
+      this.localScreenShareStream = localScreenShareStream;
+      this.screenShareProducer = screenShareProducer;
+      this.notifyScreenShareStreamsChanged();
+    } catch (error) {
+      await this.stopScreenSharePublishing();
+      await Promise.resolve(this.onScreenShareCaptureFailed(error));
+    }
+  }
+
+  /**
+   * Останавливает локальную демонстрацию экрана и очищает preview stream.
+   */
+  private async stopScreenSharePublishing(): Promise<void> {
+    this.screenShareProducer?.close();
+    this.screenShareProducer = null;
+
+    if (this.screenShareTrack) {
+      this.screenShareTrack.onended = null;
+      this.screenShareTrack.stop();
+      this.screenShareTrack = null;
+    }
+
+    this.localScreenShareStream = null;
+    this.notifyScreenShareStreamsChanged();
+  }
+
+  /**
+   * Получает video track демонстрации экрана через browser display capture API.
+   */
+  private async captureScreenShareTrack(): Promise<MediaStreamTrack> {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      throw new Error("Браузер не поддерживает демонстрацию экрана.");
+    }
+
+    const mediaStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false,
+    });
+    const screenShareTrack = mediaStream.getVideoTracks()[0];
+
+    if (!screenShareTrack) {
+      throw new Error("Не удалось получить видеотрек демонстрации экрана.");
+    }
+
+    return screenShareTrack;
+  }
+
+  /**
+   * Обрабатывает ручную остановку screen share из browser capture picker.
+   */
+  private async handleLocalScreenShareEnded(): Promise<void> {
+    if (this.destroyed || !this.screenShareProducer) {
+      return;
+    }
+
+    await this.stopScreenSharePublishing();
+    await Promise.resolve(
+      this.onScreenShareCaptureFailed(
+        new Error("Демонстрация экрана была остановлена в браузере."),
+      ),
+    );
   }
 
   /**
@@ -519,6 +743,7 @@ class VoiceChannelSession {
       producerId: string;
       producerUserId: string;
       kind: string;
+      mediaType: MediaType;
       rtpParameters: unknown;
       type: string | null;
     }>(
@@ -534,24 +759,32 @@ class VoiceChannelSession {
     const consumer = await this.recvTransport.consume({
       id: consumeResponse.consumerId,
       producerId: consumeResponse.producerId,
-      kind: consumeResponse.kind as "audio",
+      kind: consumeResponse.kind as "audio" | "video",
       rtpParameters: consumeResponse.rtpParameters as never,
       appData: {
         producerUserId: consumeResponse.producerUserId,
       },
     });
-
-    const audioElement = document.createElement("audio");
-    audioElement.autoplay = true;
-    audioElement.setAttribute("playsinline", "true");
-    audioElement.muted = this.currentVoiceState.deafened;
-    audioElement.srcObject = new MediaStream([consumer.track]);
-    void audioElement.play().catch(() => {});
+    const stream = new MediaStream([consumer.track]);
+    const audioElement =
+      consumeResponse.mediaType === "audio"
+        ? createAudioElement({
+            stream,
+            muted: this.currentVoiceState.deafened,
+          })
+        : null;
 
     this.remoteConsumers.set(producerId, {
       consumer,
+      producerUserId: consumeResponse.producerUserId,
+      mediaType: consumeResponse.mediaType,
+      stream,
       audioElement,
     });
+
+    if (consumeResponse.mediaType === "screen") {
+      this.notifyScreenShareStreamsChanged();
+    }
   }
 
   /**
@@ -565,9 +798,44 @@ class VoiceChannelSession {
     }
 
     remoteConsumer.consumer.close();
-    remoteConsumer.audioElement.pause();
-    remoteConsumer.audioElement.srcObject = null;
+    if (remoteConsumer.audioElement) {
+      remoteConsumer.audioElement.pause();
+      remoteConsumer.audioElement.srcObject = null;
+    }
     this.remoteConsumers.delete(producerId);
+
+    if (remoteConsumer.mediaType === "screen") {
+      this.notifyScreenShareStreamsChanged();
+    }
+  }
+
+  /**
+   * Публикует наружу актуальный список активных screen-share stream-ов voice session.
+   */
+  private notifyScreenShareStreamsChanged(): void {
+    const nextStreams: ClientVoiceScreenShareStream[] = [];
+
+    if (this.localScreenShareStream) {
+      nextStreams.push({
+        userId: this.currentUserId,
+        stream: this.localScreenShareStream,
+        isCurrentUser: true,
+      });
+    }
+
+    for (const remoteConsumer of this.remoteConsumers.values()) {
+      if (remoteConsumer.mediaType !== "screen") {
+        continue;
+      }
+
+      nextStreams.push({
+        userId: remoteConsumer.producerUserId,
+        stream: remoteConsumer.stream,
+        isCurrentUser: false,
+      });
+    }
+
+    this.onScreenShareStreamsChanged(nextStreams);
   }
 
   /**
@@ -631,4 +899,18 @@ function toError(error: unknown): Error {
   }
 
   return new Error("Voice session operation failed.");
+}
+
+function createAudioElement(input: {
+  stream: MediaStream;
+  muted: boolean;
+}): HTMLAudioElement {
+  const audioElement = document.createElement("audio");
+  audioElement.autoplay = true;
+  audioElement.setAttribute("playsinline", "true");
+  audioElement.muted = input.muted;
+  audioElement.srcObject = input.stream;
+  void audioElement.play().catch(() => {});
+
+  return audioElement;
 }

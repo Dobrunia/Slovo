@@ -39,6 +39,7 @@ export interface VoiceSignalCommandAck {
 }
 
 type TransportDirection = "send" | "recv";
+type ProducerMediaType = "audio" | "screen";
 
 type TransportRecord = {
   serverId: string;
@@ -52,6 +53,7 @@ type ProducerRecord = {
   serverId: string;
   channelId: string;
   ownerUserId: string;
+  mediaType: ProducerMediaType;
   producer: MediaProducerLike;
 };
 
@@ -60,6 +62,7 @@ type ConsumerRecord = {
   channelId: string;
   ownerUserId: string;
   producerId: string;
+  mediaType: ProducerMediaType;
   consumer: MediaConsumerLike;
 };
 
@@ -81,6 +84,11 @@ export interface MediaSignalingBridge {
     command: VoiceSignalCommandInput;
   }): Promise<VoiceSignalCommandAck>;
   teardownUserSession(input: {
+    userId: string;
+    serverId: string;
+    channelId: string;
+  }): Promise<void>;
+  teardownUserScreenShare(input: {
     userId: string;
     serverId: string;
     channelId: string;
@@ -222,11 +230,28 @@ export function createMediaSignalingBridge(
             rtpParameters: payload.rtpParameters,
             appData: payload.appData,
           });
+          const mediaType = resolveProducerMediaType({
+            kind: payload.kind,
+            appData: payload.appData,
+          });
+
+          if (mediaType === "screen") {
+            await teardownOwnedScreenShare({
+              producerRegistry,
+              consumerRegistry,
+              emitSignalEvent: input.emitSignalEvent,
+              presenceRegistry: input.presenceRegistry,
+              serverId: command.serverId,
+              channelId: command.channelId,
+              ownerUserId: userId,
+            });
+          }
 
           producerRegistry.set(producer.id, {
             serverId: command.serverId,
             channelId: command.channelId,
             ownerUserId: userId,
+            mediaType,
             producer,
           });
 
@@ -240,6 +265,7 @@ export function createMediaSignalingBridge(
             responsePayload: {
               producerId: producer.id,
               kind: producer.kind,
+              mediaType,
             },
           });
 
@@ -251,6 +277,7 @@ export function createMediaSignalingBridge(
             ownerUserId: userId,
             producerId: producer.id,
             kind: producer.kind,
+            mediaType,
           });
           break;
         }
@@ -319,9 +346,10 @@ export function createMediaSignalingBridge(
             serverId: command.serverId,
             channelId: command.channelId,
             ownerUserId: userId,
-            producerId: payload.producerId,
-            consumer,
-          });
+              producerId: payload.producerId,
+              consumer,
+              mediaType: producerRecord.mediaType,
+            });
 
           await emitTargetedSignal({
             emitSignalEvent: input.emitSignalEvent,
@@ -335,6 +363,7 @@ export function createMediaSignalingBridge(
               producerId: payload.producerId,
               producerUserId: producerRecord.ownerUserId,
               kind: consumer.kind,
+              mediaType: producerRecord.mediaType,
               rtpParameters: consumer.rtpParameters,
               type: consumer.type ?? null,
             },
@@ -362,48 +391,15 @@ export function createMediaSignalingBridge(
     },
 
     async teardownUserSession({ userId, serverId, channelId }) {
-      const ownedProducerIds = Array.from(producerRegistry.entries())
-        .filter(([, producerRecord]) =>
-          producerRecord.ownerUserId === userId &&
-          producerRecord.serverId === serverId &&
-          producerRecord.channelId === channelId,
-        )
-        .map(([producerId]) => producerId);
-
-      for (const producerId of ownedProducerIds) {
-        const producerRecord = producerRegistry.get(producerId);
-
-        if (!producerRecord) {
-          continue;
-        }
-
-        producerRecord.producer.close();
-        producerRegistry.delete(producerId);
-
-        const relatedConsumerIds = Array.from(consumerRegistry.entries())
-          .filter(([, consumerRecord]) => consumerRecord.producerId === producerId)
-          .map(([consumerId]) => consumerId);
-
-        for (const consumerId of relatedConsumerIds) {
-          const consumerRecord = consumerRegistry.get(consumerId);
-
-          if (!consumerRecord) {
-            continue;
-          }
-
-          consumerRecord.consumer.close();
-          consumerRegistry.delete(consumerId);
-        }
-
-        await emitProducerClosed({
-          emitSignalEvent: input.emitSignalEvent,
-          presenceRegistry: input.presenceRegistry,
-          serverId,
-          channelId,
-          ownerUserId: userId,
-          producerId,
-        });
-      }
+      await teardownOwnedProducers({
+        producerRegistry,
+        consumerRegistry,
+        emitSignalEvent: input.emitSignalEvent,
+        presenceRegistry: input.presenceRegistry,
+        serverId,
+        channelId,
+        ownerUserId: userId,
+      });
 
       for (const [consumerId, consumerRecord] of Array.from(consumerRegistry.entries())) {
         if (
@@ -428,16 +424,30 @@ export function createMediaSignalingBridge(
       }
     },
 
+    async teardownUserScreenShare({ userId, serverId, channelId }) {
+      await teardownOwnedScreenShare({
+        producerRegistry,
+        consumerRegistry,
+        emitSignalEvent: input.emitSignalEvent,
+        presenceRegistry: input.presenceRegistry,
+        serverId,
+        channelId,
+        ownerUserId: userId,
+      });
+    },
+
     async applyVoiceState({ userId, serverId, channelId, muted, deafened }) {
       const producerRecords = Array.from(producerRegistry.values()).filter((producerRecord) =>
         producerRecord.ownerUserId === userId &&
         producerRecord.serverId === serverId &&
-        producerRecord.channelId === channelId,
+        producerRecord.channelId === channelId &&
+        producerRecord.mediaType === "audio",
       );
       const consumerRecords = Array.from(consumerRegistry.values()).filter((consumerRecord) =>
         consumerRecord.ownerUserId === userId &&
         consumerRecord.serverId === serverId &&
-        consumerRecord.channelId === channelId,
+        consumerRecord.channelId === channelId &&
+        consumerRecord.mediaType === "audio",
       );
 
       for (const producerRecord of producerRecords) {
@@ -507,6 +517,7 @@ async function emitProducerAvailable(input: {
   ownerUserId: string;
   producerId: string;
   kind: string;
+  mediaType: ProducerMediaType;
 }): Promise<void> {
   const peers = input.presenceRegistry
     .getServerPresence(input.serverId)
@@ -526,6 +537,7 @@ async function emitProducerAvailable(input: {
           producerId: input.producerId,
           producerUserId: input.ownerUserId,
           kind: input.kind,
+          mediaType: input.mediaType,
         }),
         occurredAt: new Date().toISOString(),
       }),
@@ -581,7 +593,78 @@ function listAvailableProducers(input: {
       producerId: producerRecord.producer.id,
       producerUserId: producerRecord.ownerUserId,
       kind: producerRecord.producer.kind,
+      mediaType: producerRecord.mediaType,
     }));
+}
+
+async function teardownOwnedProducers(input: {
+  producerRegistry: Map<string, ProducerRecord>;
+  consumerRegistry: Map<string, ConsumerRecord>;
+  emitSignalEvent: CreateMediaSignalingBridgeInput["emitSignalEvent"];
+  presenceRegistry: RuntimePresenceRegistry;
+  serverId: string;
+  channelId: string;
+  ownerUserId: string;
+  mediaType?: ProducerMediaType;
+}): Promise<void> {
+  const ownedProducerIds = Array.from(input.producerRegistry.entries())
+    .filter(([, producerRecord]) =>
+      producerRecord.ownerUserId === input.ownerUserId &&
+      producerRecord.serverId === input.serverId &&
+      producerRecord.channelId === input.channelId &&
+      (!input.mediaType || producerRecord.mediaType === input.mediaType),
+    )
+    .map(([producerId]) => producerId);
+
+  for (const producerId of ownedProducerIds) {
+    const producerRecord = input.producerRegistry.get(producerId);
+
+    if (!producerRecord) {
+      continue;
+    }
+
+    producerRecord.producer.close();
+    input.producerRegistry.delete(producerId);
+
+    const relatedConsumerIds = Array.from(input.consumerRegistry.entries())
+      .filter(([, consumerRecord]) => consumerRecord.producerId === producerId)
+      .map(([consumerId]) => consumerId);
+
+    for (const consumerId of relatedConsumerIds) {
+      const consumerRecord = input.consumerRegistry.get(consumerId);
+
+      if (!consumerRecord) {
+        continue;
+      }
+
+      consumerRecord.consumer.close();
+      input.consumerRegistry.delete(consumerId);
+    }
+
+    await emitProducerClosed({
+      emitSignalEvent: input.emitSignalEvent,
+      presenceRegistry: input.presenceRegistry,
+      serverId: input.serverId,
+      channelId: input.channelId,
+      ownerUserId: input.ownerUserId,
+      producerId,
+    });
+  }
+}
+
+async function teardownOwnedScreenShare(input: {
+  producerRegistry: Map<string, ProducerRecord>;
+  consumerRegistry: Map<string, ConsumerRecord>;
+  emitSignalEvent: CreateMediaSignalingBridgeInput["emitSignalEvent"];
+  presenceRegistry: RuntimePresenceRegistry;
+  serverId: string;
+  channelId: string;
+  ownerUserId: string;
+}): Promise<void> {
+  await teardownOwnedProducers({
+    ...input,
+    mediaType: "screen",
+  });
 }
 
 async function emitTargetedSignal(input: {
@@ -665,4 +748,15 @@ function parseSignalPayload<TPayload>(payloadJson: string): TPayload {
   } catch {
     throw new Error("Некорректный signaling payload.");
   }
+}
+
+function resolveProducerMediaType(input: {
+  kind: string;
+  appData?: Record<string, unknown>;
+}): ProducerMediaType {
+  if (input.appData?.media === "screen" || input.kind === "video") {
+    return "screen";
+  }
+
+  return "audio";
 }

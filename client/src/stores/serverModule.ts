@@ -6,6 +6,7 @@ import {
   executeJoinVoiceChannelCommand,
   executeLeaveVoiceChannelCommand,
   executeMoveVoiceChannelCommand,
+  executeSetScreenShareActiveCommand,
   executeSetSelfDeafenCommand,
   executeSetSelfMuteCommand,
 } from "../realtime/runtime";
@@ -17,7 +18,9 @@ import type {
   ClientDeleteServerResult,
   ClientPresenceUpdatedEventPayload,
   ClientCurrentVoiceState,
+  ClientRuntimeScreenShareState,
   ClientRuntimePresenceMember,
+  ClientScreenShareUpdatedEventPayload,
   ClientServerInviteLink,
   ClientServerListItem,
   ClientServerSnapshot,
@@ -25,6 +28,7 @@ import type {
   ClientUpdateServerInput,
   ClientVoiceStateUpdatedEventPayload,
   ClientVoiceChannel,
+  ClientVoiceScreenShareStream,
 } from "../types/server";
 
 /**
@@ -51,6 +55,8 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   const presenceErrorMessage = ref<string | null>(null);
   const presenceMembers = ref<ClientRuntimePresenceMember[]>([]);
   const activeVoicePresence = ref<ClientActiveVoicePresence | null>(null);
+  const screenShareStates = ref<ClientRuntimeScreenShareState[]>([]);
+  const screenShareStreams = ref<ClientVoiceScreenShareStream[]>([]);
   const currentVoiceState = ref<ClientCurrentVoiceState>({
     muted: false,
     deafened: false,
@@ -67,6 +73,15 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     }
 
     return activeVoicePresence.value;
+  });
+  const currentUserScreenShareState = computed(() => {
+    const currentUserId = useAuthStore().currentUser?.id;
+
+    if (!currentUserId) {
+      return null;
+    }
+
+    return screenShareStates.value.find((state) => state.userId === currentUserId) ?? null;
   });
 
   /**
@@ -156,6 +171,8 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     presenceErrorMessage.value = null;
     presenceMembers.value = [];
     activeVoicePresence.value = null;
+    screenShareStates.value = [];
+    screenShareStreams.value = [];
     currentVoiceState.value = {
       muted: false,
       deafened: false,
@@ -493,10 +510,17 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     const currentUserId = useAuthStore().currentUser?.id;
 
     if (payload.member.userId === currentUserId) {
-      if (payload.action === "left") {
-        if (activeVoicePresence.value?.serverId === payload.serverId) {
-          activeVoicePresence.value = null;
-          currentVoiceState.value = {
+    if (payload.action === "left") {
+      screenShareStates.value = screenShareStates.value.filter(
+        (state) => state.userId !== payload.member.userId,
+      );
+      screenShareStreams.value = screenShareStreams.value.filter(
+        (stream) => stream.userId !== payload.member.userId,
+      );
+
+      if (activeVoicePresence.value?.serverId === payload.serverId) {
+        activeVoicePresence.value = null;
+        currentVoiceState.value = {
             muted: false,
             deafened: false,
           };
@@ -551,6 +575,32 @@ export const useServerModuleStore = defineStore("serverModule", () => {
       muted: payload.muted,
       deafened: payload.deafened,
     };
+  }
+
+  /**
+   * Применяет live-обновление состояния демонстрации экрана внутри активной voice session.
+   */
+  function applyScreenShareUpdated(payload: ClientScreenShareUpdatedEventPayload): void {
+    if (payload.active) {
+      const nextStates = screenShareStates.value.filter(
+        (state) => state.userId !== payload.userId,
+      );
+
+      nextStates.push({
+        userId: payload.userId,
+        serverId: payload.serverId,
+        channelId: payload.channelId,
+      });
+      screenShareStates.value = nextStates;
+      return;
+    }
+
+    screenShareStates.value = screenShareStates.value.filter(
+      (state) => state.userId !== payload.userId,
+    );
+    screenShareStreams.value = screenShareStreams.value.filter(
+      (stream) => stream.userId !== payload.userId,
+    );
   }
 
   /**
@@ -705,6 +755,41 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   }
 
   /**
+   * Выполняет realtime-команду изменения состояния демонстрации экрана.
+   */
+  async function setScreenShareActive(active: boolean): Promise<void> {
+    const currentPresence = currentUserPresence.value;
+    const currentUserId = useAuthStore().currentUser?.id;
+
+    if (!currentPresence || !currentUserId) {
+      return;
+    }
+
+    const sessionToken = requireSessionToken();
+
+    presenceErrorMessage.value = null;
+
+    try {
+      await executeSetScreenShareActiveCommand({
+        sessionToken,
+        serverId: currentPresence.serverId,
+        channelId: currentPresence.channelId,
+        active,
+      });
+      applyScreenShareUpdated({
+        serverId: currentPresence.serverId,
+        userId: currentUserId,
+        channelId: currentPresence.channelId,
+        active,
+        occurredAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      presenceErrorMessage.value = toPresenceErrorMessage(error);
+      throw error;
+    }
+  }
+
+  /**
    * Возвращает id текущего выбранного сервера или завершает операцию ошибкой.
    */
   function requireSelectedServerId(): string {
@@ -720,6 +805,51 @@ export const useServerModuleStore = defineStore("serverModule", () => {
    */
   function selectChannel(channelId: string | null): void {
     selectedChannelId.value = channelId;
+  }
+
+  /**
+   * Заменяет доступные screen-share stream-ы текущей voice session.
+   */
+  function replaceScreenShareStreams(streams: ClientVoiceScreenShareStream[]): void {
+    screenShareStreams.value = streams;
+  }
+
+  /**
+   * Очищает локальные screen-share stream-ы после teardown voice session.
+   */
+  function clearScreenShareStreams(): void {
+    screenShareStreams.value = [];
+  }
+
+  /**
+   * Откатывает локальный screen-share state после ошибки захвата экрана.
+   */
+  async function handleScreenShareCaptureFailure(): Promise<void> {
+    const currentPresence = currentUserPresence.value;
+    const currentUserId = useAuthStore().currentUser?.id;
+
+    if (!currentPresence || !currentUserId) {
+      return;
+    }
+
+    applyScreenShareUpdated({
+      serverId: currentPresence.serverId,
+      userId: currentUserId,
+      channelId: currentPresence.channelId,
+      active: false,
+      occurredAt: new Date().toISOString(),
+    });
+
+    try {
+      await executeSetScreenShareActiveCommand({
+        sessionToken: requireSessionToken(),
+        serverId: currentPresence.serverId,
+        channelId: currentPresence.channelId,
+        active: false,
+      });
+    } catch (error) {
+      presenceErrorMessage.value = toPresenceErrorMessage(error);
+    }
   }
 
   /**
@@ -773,6 +903,12 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     const currentUserId = useAuthStore().currentUser?.id;
 
     activeVoicePresence.value = null;
+    screenShareStates.value = screenShareStates.value.filter(
+      (state) => state.userId !== currentUserId,
+    );
+    screenShareStreams.value = screenShareStreams.value.filter(
+      (stream) => stream.userId !== currentUserId,
+    );
     currentVoiceState.value = {
       muted: false,
       deafened: false,
@@ -823,8 +959,11 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     presenceErrorMessage,
     presenceMembers,
     activeVoicePresence,
+    screenShareStates,
+    screenShareStreams,
     currentVoiceState,
     currentUserPresence,
+    currentUserScreenShareState,
     syncAvailableServers,
     openServer,
     reloadSelectedServer,
@@ -840,11 +979,16 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     applyLiveChannelsUpdated,
     applyPresenceUpdated,
     applyVoiceStateUpdated,
+    applyScreenShareUpdated,
     joinOrMoveToChannel,
     leaveCurrentChannel,
     setSelfMuted,
     setSelfDeafened,
+    setScreenShareActive,
     selectChannel,
+    replaceScreenShareStreams,
+    clearScreenShareStreams,
+    handleScreenShareCaptureFailure,
     clearCurrentUserPresenceLocally,
     clearChannelsError,
     clearServerUpdateError,
