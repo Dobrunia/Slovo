@@ -1,7 +1,12 @@
 import { onMounted, onUnmounted, watch } from "vue";
+import {
+  applyRealtimeConnectionSnapshot,
+  createRealtimeConnectionRecoveryState,
+} from "../realtime/connectionRecovery";
 import { resolvePresenceSoundCue } from "../realtime/presence-sound";
 import {
   resetRealtimeRuntime,
+  subscribeToRealtimeConnectionState,
   subscribeToCurrentUserProfile,
 } from "../realtime/runtime";
 import { subscribeToServerLiveState } from "../realtime/server-live";
@@ -33,8 +38,10 @@ export function useHomePageRealtime({
   const serversStore = useServersStore();
   let stopServerLiveSubscription: (() => void) | null = null;
   let stopCurrentUserProfileSubscription: (() => void) | null = null;
+  let stopRealtimeConnectionStateSubscription: (() => void) | null = null;
   let requestedServerLiveSubscriptionTarget: string | null = null;
   let activeServerLiveSubscriptionTarget: string | null = null;
+  let connectionRecoveryState = createRealtimeConnectionRecoveryState();
 
   watch(
     [() => authStore.sessionToken, () => selectedServerId.value],
@@ -50,6 +57,16 @@ export function useHomePageRealtime({
     [() => authStore.sessionToken, () => authStore.currentUser?.id ?? null],
     ([sessionToken, currentUserId]) => {
       void switchCurrentUserProfileSubscription(sessionToken, currentUserId);
+    },
+    {
+      immediate: true,
+    },
+  );
+
+  watch(
+    () => authStore.sessionToken,
+    (sessionToken) => {
+      switchRealtimeConnectionStateSubscription(sessionToken);
     },
     {
       immediate: true,
@@ -124,6 +141,7 @@ export function useHomePageRealtime({
     window.removeEventListener("pagehide", handlePageHide);
     teardownServerLiveSubscription();
     teardownCurrentUserProfileSubscription();
+    teardownRealtimeConnectionStateSubscription();
     resetActiveVoiceSession();
     resetRealtimeRuntime();
   });
@@ -259,17 +277,72 @@ export function useHomePageRealtime({
   }
 
   /**
-   * Локально очищает stale voice-state при разрыве сети до прихода серверного cleanup.
+   * Подписывает текущую auth-сессию на lifecycle realtime transport-а.
    */
-  function handleOffline(): void {
-    const currentPresence = serverModuleStore.currentUserPresence;
+  function switchRealtimeConnectionStateSubscription(sessionToken: string | null): void {
+    teardownRealtimeConnectionStateSubscription();
+    connectionRecoveryState = createRealtimeConnectionRecoveryState();
 
-    if (!currentPresence) {
+    if (!sessionToken) {
       return;
     }
 
-    serverModuleStore.clearCurrentUserPresenceLocally(currentPresence.serverId);
-    serverModuleStore.clearScreenShareStreams();
+    stopRealtimeConnectionStateSubscription = subscribeToRealtimeConnectionState({
+      sessionToken,
+      onConnectionState: (snapshot) => {
+        connectionRecoveryState = applyRealtimeConnectionSnapshot({
+          state: connectionRecoveryState,
+          snapshot,
+          onDisconnected: () => {
+            handleRealtimeConnectionLost();
+          },
+          onReconnected: () => {
+            void handleRealtimeReconnected();
+          },
+        });
+      },
+    });
+  }
+
+  /**
+   * Удаляет lifecycle-подписку текущего realtime runtime.
+   */
+  function teardownRealtimeConnectionStateSubscription(): void {
+    stopRealtimeConnectionStateSubscription?.();
+    stopRealtimeConnectionStateSubscription = null;
+    connectionRecoveryState = createRealtimeConnectionRecoveryState();
+  }
+
+  /**
+   * Мгновенно очищает локальный voice/media state при потере transport-соединения.
+   */
+  function handleRealtimeConnectionLost(): void {
+    serverModuleStore.handleRealtimeConnectionInterrupted(
+      "Соединение потеряно. Войдите в канал заново.",
+    );
+    resetActiveVoiceSession();
+  }
+
+  /**
+   * После восстановления transport-соединения переснимает критические snapshot-ы MVP.
+   */
+  async function handleRealtimeReconnected(): Promise<void> {
+    const recoveryTasks: Array<Promise<unknown>> = [serversStore.loadServers()];
+
+    if (selectedServerId.value) {
+      recoveryTasks.push(serverModuleStore.reloadSelectedServer());
+    }
+
+    await Promise.allSettled(recoveryTasks);
+  }
+
+  /**
+   * Локально очищает stale voice-state при разрыве сети до прихода серверного cleanup.
+   */
+  function handleOffline(): void {
+    serverModuleStore.handleRealtimeConnectionInterrupted(
+      "Соединение потеряно. Войдите в канал заново.",
+    );
     resetActiveVoiceSession();
   }
 
@@ -277,15 +350,10 @@ export function useHomePageRealtime({
    * При refresh/закрытии вкладки полностью сбрасывает voice/runtime lifecycle.
    */
   function handlePageHide(): void {
-    const currentPresence = serverModuleStore.currentUserPresence;
-
-    if (currentPresence) {
-      serverModuleStore.clearCurrentUserPresenceLocally(currentPresence.serverId);
-    }
-
-    serverModuleStore.clearScreenShareStreams();
+    serverModuleStore.handleRealtimeConnectionInterrupted();
     teardownServerLiveSubscription();
     teardownCurrentUserProfileSubscription();
+    teardownRealtimeConnectionStateSubscription();
     resetActiveVoiceSession();
     resetRealtimeRuntime();
   }

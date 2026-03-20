@@ -1018,6 +1018,26 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   }
 
   /**
+   * Локально завершает voice lifecycle клиента при разрыве realtime-соединения.
+   */
+  function handleRealtimeConnectionInterrupted(reason?: string): void {
+    const currentPresence = currentUserPresence.value;
+
+    isChangingPresence.value = false;
+    clearScreenShareStreams();
+
+    if (!currentPresence) {
+      return;
+    }
+
+    clearCurrentUserPresenceLocally(currentPresence.serverId);
+
+    if (reason) {
+      presenceErrorMessage.value = reason;
+    }
+  }
+
+  /**
    * Очищает открытый серверный экран, если пользователь потерял к нему доступ.
    */
   function handleServerAccessRevoked(serverId: string): void {
@@ -1123,6 +1143,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     replaceScreenShareStreams,
     clearScreenShareStreams,
     handleScreenShareCaptureFailure,
+    handleRealtimeConnectionInterrupted,
     handleServerAccessRevoked,
     handleForcedDisconnect,
     clearCurrentUserPresenceLocally,

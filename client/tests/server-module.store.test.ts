@@ -1362,6 +1362,57 @@ describe("server module store", () => {
   });
 
   /**
+   * Проверяется, что при потере realtime-соединения store мгновенно снимает текущего пользователя
+   * с локального voice presence, очищает screen share stream-ы и оставляет человекочитаемую ошибку.
+   * Это важно, потому что после сетевого обрыва клиент не должен видеть себя зависшим в канале
+   * до прихода серверного cleanup или ручного обновления страницы.
+   * Граничные случаи: активный канал уже выбран, voice state включен, а локальный экранный поток существует.
+   */
+  test("should clear local presence immediately when realtime connection is interrupted", () => {
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+
+    const serverModuleStore = useServerModuleStore();
+    const localStream = {} as MediaStream;
+
+    serverModuleStore.selectedServerId = "server-1";
+    serverModuleStore.selectedChannelId = "channel-1";
+    serverModuleStore.isChangingPresence = true;
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-20T13:05:00.000Z",
+      },
+      previousChannelId: null,
+      action: "joined",
+      occurredAt: "2026-03-20T13:05:00.000Z",
+    });
+    serverModuleStore.replaceScreenShareStreams([
+      {
+        userId: "user-1",
+        stream: localStream,
+        isCurrentUser: true,
+      },
+    ]);
+
+    serverModuleStore.handleRealtimeConnectionInterrupted(
+      "Соединение потеряно. Войдите в канал заново.",
+    );
+
+    expect(serverModuleStore.currentUserPresence).toBeNull();
+    expect(serverModuleStore.selectedChannelId).toBeNull();
+    expect(serverModuleStore.screenShareStreams).toEqual([]);
+    expect(serverModuleStore.isChangingPresence).toBe(false);
+    expect(serverModuleStore.presenceErrorMessage).toBe(
+      "Соединение потеряно. Войдите в канал заново.",
+    );
+  });
+
+  /**
    * Проверяется, что активное голосовое присутствие не привязано к открытому серверу в URL,
    * а значит пользователь может оставаться в канале одного сервера и переключать страницу
    * на другой сервер без локального disconnect и без потери mute/deafen state.

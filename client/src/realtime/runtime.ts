@@ -1,4 +1,7 @@
-import { createClientRuntime } from "dobrunia-liverail-client";
+import {
+  createClientRuntime,
+  type ClientConnectionLifecycleSnapshot,
+} from "dobrunia-liverail-client";
 import { createSocketIoClientTransport } from "dobrunia-liverail-client/socket-io";
 import { DEFAULT_CLIENT_REALTIME_URL } from "../constants";
 import { slovoRealtimeRegistry } from "./contracts";
@@ -50,6 +53,11 @@ type VoiceSessionSubscriptionInput = {
   onScreenShareUpdated: (payload: ClientScreenShareUpdatedEventPayload) => void;
 };
 
+type RealtimeConnectionStateSubscriptionInput = {
+  sessionToken: string | null;
+  onConnectionState: (snapshot: ClientConnectionLifecycleSnapshot) => void;
+};
+
 let runtime: SlovoRealtimeRuntime | null = null;
 let runtimeSessionToken: string | null = null;
 
@@ -60,6 +68,22 @@ export function resetRealtimeRuntime(): void {
   runtime?.destroy();
   runtime = null;
   runtimeSessionToken = null;
+}
+
+/**
+ * Подписывает клиента на transport-agnostic lifecycle realtime-соединения.
+ */
+export function subscribeToRealtimeConnectionState(
+  input: RealtimeConnectionStateSubscriptionInput,
+): () => void {
+  if (!input.sessionToken) {
+    return () => undefined;
+  }
+
+  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
+  input.onConnectionState(currentRuntime.inspectConnection());
+
+  return currentRuntime.onConnectionState(input.onConnectionState);
 }
 
 /**
