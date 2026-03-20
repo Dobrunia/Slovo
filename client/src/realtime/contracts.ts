@@ -6,219 +6,219 @@ import {
   event,
 } from "dobrunia-liverail-contracts";
 import {
-  REALTIME_CHANNEL_NAMES,
-  REALTIME_COMMAND_NAMES,
-  REALTIME_EVENT_NAMES,
-} from "../../../shared/realtime/names";
+  createSlovoRealtimeContractDefinitions,
+  REALTIME_SIGNAL_PAYLOAD_JSON_MAX_LENGTH,
+  REALTIME_SIGNAL_TYPE_MAX_LENGTH,
+} from "../../../shared/realtime/contracts";
 
-const serverKeySchema = z.object({
-  serverId: z.string().min(1),
-});
+export {
+  REALTIME_SIGNAL_PAYLOAD_JSON_MAX_LENGTH,
+  REALTIME_SIGNAL_TYPE_MAX_LENGTH,
+};
 
-const userProfileKeySchema = z.object({
-  userId: z.string().min(1),
-});
+const realtimeNames = createSlovoRealtimeContractDefinitions();
 
-const voiceSessionKeySchema = z.object({
-  serverId: z.string().min(1),
-  channelId: z.string().min(1),
-});
+const serverIdSchema = z.string().min(1);
+const channelIdSchema = z.string().min(1);
+const userIdSchema = z.string().min(1);
+const occurredAtSchema = z.string().min(1);
+const updatedAtSchema = z.string().min(1);
+const avatarUrlSchema = z.string().url().nullable();
+const nullableUserIdSchema = z.string().min(1).nullable();
+const signalTypeSchema = z.string().min(1).max(REALTIME_SIGNAL_TYPE_MAX_LENGTH);
+const payloadJsonSchema = z
+  .string()
+  .min(1)
+  .max(REALTIME_SIGNAL_PAYLOAD_JSON_MAX_LENGTH);
 
-const signalingKeySchema = z.object({
-  serverId: z.string().min(1),
-  channelId: z.string().min(1),
-});
+const serverMembershipRoleSchema = z.enum(["OWNER", "MEMBER"]);
+const userServersActionSchema = z.enum(["created", "joined", "deleted"]);
+const presenceActionSchema = z.enum(["joined", "left", "moved"]);
 
-const commandAckSchema = z.object({
-  accepted: z.boolean(),
-  acknowledgedAt: z.string().min(1),
-});
-
-const channelSnapshotSchema = z.object({
-  id: z.string().min(1),
+const voiceChannelSchema = z.object({
+  id: channelIdSchema,
   name: z.string().min(1),
   sortOrder: z.number().int().min(0),
 });
 
-const presenceMemberSchema = z.object({
-  userId: z.string().min(1),
+const runtimePresenceMemberSchema = z.object({
+  userId: userIdSchema,
   displayName: z.string().min(1),
-  avatarUrl: z.string().url().nullable(),
-  channelId: z.string().min(1),
-  joinedAt: z.string().min(1),
+  avatarUrl: avatarUrlSchema,
+  channelId: channelIdSchema,
+  joinedAt: occurredAtSchema,
 });
 
-/**
- * Типизированные realtime-каналы проекта.
- */
-export const realtimeChannels = [
-  channel(REALTIME_CHANNEL_NAMES.serverStructure, {
-    key: serverKeySchema,
-  }),
-  channel(REALTIME_CHANNEL_NAMES.serverPresence, {
-    key: serverKeySchema,
-  }),
-  channel(REALTIME_CHANNEL_NAMES.userProfile, {
-    key: userProfileKeySchema,
-  }),
-  channel(REALTIME_CHANNEL_NAMES.voiceSession, {
-    key: voiceSessionKeySchema,
-  }),
-  channel(REALTIME_CHANNEL_NAMES.voiceSignaling, {
-    key: signalingKeySchema,
-  }),
-] as const;
+const okAckSchema = z.object({
+  ok: z.literal(true),
+});
 
-/**
- * Типизированные realtime-события проекта.
- */
+export const realtimeChannels: ReturnType<typeof channel>[] = [
+  channel(realtimeNames.channels.serverStructure, {
+    key: z.object({
+      serverId: serverIdSchema,
+    }),
+  }),
+  channel(realtimeNames.channels.serverPresence, {
+    key: z.object({
+      serverId: serverIdSchema,
+    }),
+  }),
+  channel(realtimeNames.channels.userProfile, {
+    key: z.object({
+      userId: userIdSchema,
+    }),
+  }),
+  channel(realtimeNames.channels.voiceSession, {
+    key: z.object({
+      serverId: serverIdSchema,
+      channelId: channelIdSchema,
+    }),
+  }),
+  channel(realtimeNames.channels.voiceSignaling, {
+    key: z.object({
+      serverId: serverIdSchema,
+      channelId: channelIdSchema,
+    }),
+  }),
+];
+
+export const realtimeCommands: ReturnType<typeof command>[] = [
+  command(realtimeNames.commands.joinVoiceChannel, {
+    input: z.object({
+      serverId: serverIdSchema,
+      channelId: channelIdSchema,
+    }),
+    ack: okAckSchema,
+  }),
+  command(realtimeNames.commands.leaveVoiceChannel, {
+    input: z.object({
+      serverId: serverIdSchema,
+    }),
+    ack: okAckSchema,
+  }),
+  command(realtimeNames.commands.moveVoiceChannel, {
+    input: z.object({
+      serverId: serverIdSchema,
+      channelId: channelIdSchema,
+    }),
+    ack: okAckSchema,
+  }),
+  command(realtimeNames.commands.setSelfMute, {
+    input: z.object({
+      serverId: serverIdSchema,
+      muted: z.boolean(),
+    }),
+    ack: okAckSchema,
+  }),
+  command(realtimeNames.commands.setSelfDeafen, {
+    input: z.object({
+      serverId: serverIdSchema,
+      deafened: z.boolean(),
+    }),
+    ack: okAckSchema,
+  }),
+  command(realtimeNames.commands.setScreenShareActive, {
+    input: z.object({
+      serverId: serverIdSchema,
+      active: z.boolean(),
+    }),
+    ack: okAckSchema,
+  }),
+  command(realtimeNames.commands.signalVoiceSession, {
+    input: z.object({
+      serverId: serverIdSchema,
+      channelId: channelIdSchema,
+      targetUserId: nullableUserIdSchema,
+      signalType: signalTypeSchema,
+      payloadJson: payloadJsonSchema,
+    }),
+    ack: okAckSchema,
+  }),
+];
+
 export const realtimeEvents = [
-  event(REALTIME_EVENT_NAMES.profileUpdated, {
+  event(realtimeNames.events.serverUpdated, {
     payload: z.object({
-      userId: z.string().min(1),
-      displayName: z.string().min(1),
-      avatarUrl: z.string().url().nullable(),
-      updatedAt: z.string().min(1),
-    }),
-  }),
-  event(REALTIME_EVENT_NAMES.userServersUpdated, {
-    payload: z.object({
-      userId: z.string().min(1),
-      serverId: z.string().min(1),
-      action: z.enum(["created", "joined", "deleted"]),
-      occurredAt: z.string().min(1),
-    }),
-  }),
-  event(REALTIME_EVENT_NAMES.serverUpdated, {
-    payload: z.object({
-      serverId: z.string().min(1),
+      serverId: serverIdSchema,
       name: z.string().min(1),
-      avatarUrl: z.string().url().nullable(),
+      avatarUrl: avatarUrlSchema,
       isPublic: z.boolean(),
-      updatedAt: z.string().min(1),
+      updatedAt: updatedAtSchema,
     }),
   }),
-  event(REALTIME_EVENT_NAMES.channelsUpdated, {
+  event(realtimeNames.events.channelsUpdated, {
     payload: z.object({
-      serverId: z.string().min(1),
-      channels: z.array(channelSnapshotSchema),
-      updatedAt: z.string().min(1),
+      serverId: serverIdSchema,
+      channels: z.array(voiceChannelSchema),
+      updatedAt: updatedAtSchema,
     }),
   }),
-  event(REALTIME_EVENT_NAMES.presenceUpdated, {
+  event(realtimeNames.events.presenceUpdated, {
     payload: z.object({
-      serverId: z.string().min(1),
-      member: presenceMemberSchema,
-      previousChannelId: z.string().min(1).nullable(),
-      action: z.enum(["joined", "left", "moved"]),
-      occurredAt: z.string().min(1),
+      serverId: serverIdSchema,
+      member: runtimePresenceMemberSchema,
+      previousChannelId: channelIdSchema.nullable(),
+      action: presenceActionSchema,
+      occurredAt: occurredAtSchema,
     }),
   }),
-  event(REALTIME_EVENT_NAMES.voiceSessionSignaled, {
+  event(realtimeNames.events.userServersUpdated, {
     payload: z.object({
-      serverId: z.string().min(1),
-      channelId: z.string().min(1),
-      sourceUserId: z.string().min(1),
-      targetUserId: z.string().min(1).nullable(),
-      signalType: z.string().min(1),
-      payloadJson: z.string().min(1),
-      occurredAt: z.string().min(1),
+      userId: userIdSchema,
+      serverId: serverIdSchema,
+      action: userServersActionSchema,
+      occurredAt: occurredAtSchema,
     }),
   }),
-  event(REALTIME_EVENT_NAMES.voiceStateUpdated, {
+  event(realtimeNames.events.profileUpdated, {
     payload: z.object({
-      serverId: z.string().min(1),
-      userId: z.string().min(1),
-      channelId: z.string().min(1),
+      userId: userIdSchema,
+      displayName: z.string().min(1),
+      avatarUrl: avatarUrlSchema,
+      updatedAt: updatedAtSchema,
+    }),
+  }),
+  event(realtimeNames.events.voiceSessionSignaled, {
+    payload: z.object({
+      serverId: serverIdSchema,
+      channelId: channelIdSchema,
+      sourceUserId: userIdSchema,
+      targetUserId: nullableUserIdSchema,
+      signalType: signalTypeSchema,
+      payloadJson: payloadJsonSchema,
+      occurredAt: occurredAtSchema,
+    }),
+  }),
+  event(realtimeNames.events.voiceStateUpdated, {
+    payload: z.object({
+      serverId: serverIdSchema,
+      userId: userIdSchema,
+      channelId: channelIdSchema,
       muted: z.boolean(),
       deafened: z.boolean(),
-      occurredAt: z.string().min(1),
+      occurredAt: occurredAtSchema,
     }),
   }),
-  event(REALTIME_EVENT_NAMES.screenShareUpdated, {
+  event(realtimeNames.events.screenShareUpdated, {
     payload: z.object({
-      serverId: z.string().min(1),
-      userId: z.string().min(1),
-      channelId: z.string().min(1),
+      serverId: serverIdSchema,
+      userId: userIdSchema,
+      channelId: channelIdSchema,
       active: z.boolean(),
-      occurredAt: z.string().min(1),
+      occurredAt: occurredAtSchema,
     }),
   }),
-  event(REALTIME_EVENT_NAMES.forcedDisconnect, {
+  event(realtimeNames.events.forcedDisconnect, {
     payload: z.object({
-      serverId: z.string().min(1),
-      userId: z.string().min(1),
+      serverId: serverIdSchema,
+      userId: userIdSchema,
       reason: z.string().min(1),
-      occurredAt: z.string().min(1),
+      occurredAt: occurredAtSchema,
     }),
   }),
 ] as const;
 
-/**
- * Типизированные realtime-команды проекта.
- */
-export const realtimeCommands = [
-  command(REALTIME_COMMAND_NAMES.joinVoiceChannel, {
-    input: z.object({
-      serverId: z.string().min(1),
-      channelId: z.string().min(1),
-    }),
-    ack: commandAckSchema,
-  }),
-  command(REALTIME_COMMAND_NAMES.leaveVoiceChannel, {
-    input: z.object({
-      serverId: z.string().min(1),
-      channelId: z.string().min(1),
-    }),
-    ack: commandAckSchema,
-  }),
-  command(REALTIME_COMMAND_NAMES.moveVoiceChannel, {
-    input: z.object({
-      serverId: z.string().min(1),
-      channelId: z.string().min(1),
-      targetChannelId: z.string().min(1),
-    }),
-    ack: commandAckSchema,
-  }),
-  command(REALTIME_COMMAND_NAMES.setSelfMute, {
-    input: z.object({
-      serverId: z.string().min(1),
-      channelId: z.string().min(1),
-      muted: z.boolean(),
-    }),
-    ack: commandAckSchema,
-  }),
-  command(REALTIME_COMMAND_NAMES.setSelfDeafen, {
-    input: z.object({
-      serverId: z.string().min(1),
-      channelId: z.string().min(1),
-      deafened: z.boolean(),
-    }),
-    ack: commandAckSchema,
-  }),
-  command(REALTIME_COMMAND_NAMES.setScreenShareActive, {
-    input: z.object({
-      serverId: z.string().min(1),
-      channelId: z.string().min(1),
-      active: z.boolean(),
-    }),
-    ack: commandAckSchema,
-  }),
-  command(REALTIME_COMMAND_NAMES.signalVoiceSession, {
-    input: z.object({
-      serverId: z.string().min(1),
-      channelId: z.string().min(1),
-      targetUserId: z.string().min(1).nullable(),
-      signalType: z.string().min(1),
-      payloadJson: z.string().min(1),
-    }),
-    ack: commandAckSchema,
-  }),
-] as const;
-
-/**
- * Единый registry клиентского realtime-слоя.
- */
 export const slovoRealtimeRegistry = createContractRegistry({
   channels: realtimeChannels,
   events: realtimeEvents,

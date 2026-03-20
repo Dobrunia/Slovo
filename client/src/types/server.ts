@@ -303,3 +303,22 @@ export interface ClientVoiceScreenShareStream {
   stream: MediaStream;
   isCurrentUser: boolean;
 }
+
+/**
+ * Область realtime runtime-ошибки на клиенте.
+ */
+export type ClientRealtimeRuntimeErrorScope =
+  | "transport"
+  | "subscription"
+  | "command"
+  | "media-playback";
+
+/**
+ * Структурированная realtime-ошибка для app-side recovery и UI.
+ */
+export interface ClientRealtimeRuntimeError {
+  scope: ClientRealtimeRuntimeErrorScope;
+  message: string;
+  recoverable: boolean;
+  occurredAt: string;
+}

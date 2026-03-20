@@ -1,3 +1,7 @@
+import {
+  REALTIME_SIGNAL_PAYLOAD_JSON_MAX_LENGTH,
+  REALTIME_SIGNAL_TYPE_MAX_LENGTH,
+} from "../realtime/contracts.js";
 import type { RuntimePresenceRegistry } from "../realtime/presence.js";
 import type {
   MediaConsumerLike,
@@ -120,6 +124,8 @@ export function createMediaSignalingBridge(
 
   return {
     async handleSignal({ userId, connectionId, command }) {
+      assertSignalCommandBounds(command);
+
       assertOwnedActivePresence({
         userId,
         connectionId,
@@ -778,6 +784,19 @@ function parseSignalPayload<TPayload>(payloadJson: string): TPayload {
     return JSON.parse(payloadJson) as TPayload;
   } catch {
     throw new Error("Некорректный signaling payload.");
+  }
+}
+
+/**
+ * Применяет жесткие runtime-лимиты к signaling-команде до JSON.parse и media-операций.
+ */
+function assertSignalCommandBounds(command: VoiceSignalCommandInput): void {
+  if (command.signalType.length > REALTIME_SIGNAL_TYPE_MAX_LENGTH) {
+    throw new Error("Signal type превышает допустимый размер.");
+  }
+
+  if (command.payloadJson.length > REALTIME_SIGNAL_PAYLOAD_JSON_MAX_LENGTH) {
+    throw new Error("Signaling payload превышает допустимый размер.");
   }
 }
 

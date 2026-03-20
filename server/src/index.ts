@@ -14,6 +14,7 @@ import { createGraphqlServer } from "./graphql/server.js";
 import { createMediaFoundation } from "./media/foundation.js";
 import { isSocketIoRequest } from "./realtime/http.js";
 import { createSlovoRealtimeServer } from "./realtime/runtime.js";
+import { createShutdownCoordinator } from "./shutdown/coordinator.js";
 
 /**
  * Поднимает минимальный HTTP-сервер, который позже будет расширен GraphQL и realtime-слоями.
@@ -56,18 +57,62 @@ async function startServer() {
     server.listen(port, resolve);
   });
 
-  const shutdown = async () => {
-    realtime.io.close();
-    server.close();
-    await mediaFoundation.close();
-    await disposeDataLayer(dataLayer);
+  const shutdownCoordinator = createShutdownCoordinator({
+    closeRealtime: () =>
+      new Promise<void>((resolve, reject) => {
+        realtime.io.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      }),
+    closeHttpServer: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        });
+      }),
+    closeMediaFoundation: () => mediaFoundation.close(),
+    disposeDataLayer: () => disposeDataLayer(dataLayer),
+    onShutdownStart: (signal) => {
+      process.stdout.write(`Received ${signal}, shutting down Slovo server\n`);
+    },
+    onShutdownComplete: () => {
+      process.stdout.write("Slovo server shutdown complete\n");
+    },
+    onShutdownError: (error) => {
+      const errorMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : "Unknown shutdown error";
+
+      process.stderr.write(`Slovo server shutdown failed: ${errorMessage}\n`);
+      process.exitCode = 1;
+    },
+  });
+
+  const handleProcessSignal = (signal: NodeJS.Signals) => {
+    if (shutdownCoordinator.isShuttingDown()) {
+      process.stdout.write(`Shutdown already in progress after ${signal}\n`);
+      return;
+    }
+
+    void shutdownCoordinator.shutdown(signal);
   };
 
   process.once("SIGINT", () => {
-    void shutdown();
+    handleProcessSignal("SIGINT");
   });
   process.once("SIGTERM", () => {
-    void shutdown();
+    handleProcessSignal("SIGTERM");
   });
 
   process.stdout.write(
@@ -75,4 +120,10 @@ async function startServer() {
   );
 }
 
-void startServer();
+void startServer().catch((error) => {
+  const errorMessage =
+    error instanceof Error && error.message ? error.message : "Unknown startup error";
+
+  process.stderr.write(`Slovo server failed to start: ${errorMessage}\n`);
+  process.exitCode = 1;
+});

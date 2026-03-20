@@ -5,7 +5,9 @@ import {
 } from "../realtime/connectionRecovery";
 import { resolvePresenceSoundCue } from "../realtime/presence-sound";
 import {
+  clearRealtimeRuntimeError,
   resetRealtimeRuntime,
+  subscribeToRealtimeErrors,
   subscribeToRealtimeConnectionState,
   subscribeToCurrentUserProfile,
 } from "../realtime/runtime";
@@ -39,6 +41,9 @@ export function useHomePageRealtime({
   let stopServerLiveSubscription: (() => void) | null = null;
   let stopCurrentUserProfileSubscription: (() => void) | null = null;
   let stopRealtimeConnectionStateSubscription: (() => void) | null = null;
+  const stopRealtimeErrorSubscription = subscribeToRealtimeErrors((error) => {
+    serverModuleStore.handleRealtimeRuntimeError(error);
+  });
   let requestedServerLiveSubscriptionTarget: string | null = null;
   let activeServerLiveSubscriptionTarget: string | null = null;
   let connectionRecoveryState = createRealtimeConnectionRecoveryState();
@@ -139,6 +144,7 @@ export function useHomePageRealtime({
   onUnmounted(() => {
     window.removeEventListener("offline", handleOffline);
     window.removeEventListener("pagehide", handlePageHide);
+    stopRealtimeErrorSubscription();
     teardownServerLiveSubscription();
     teardownCurrentUserProfileSubscription();
     teardownRealtimeConnectionStateSubscription();
@@ -334,6 +340,7 @@ export function useHomePageRealtime({
     }
 
     await Promise.allSettled(recoveryTasks);
+    clearRealtimeRuntimeError("transport");
   }
 
   /**

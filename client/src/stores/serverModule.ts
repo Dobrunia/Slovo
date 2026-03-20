@@ -17,6 +17,7 @@ import type {
   ClientChannelsUpdatedEventPayload,
   ClientDeleteServerResult,
   ClientForcedDisconnectEventPayload,
+  ClientRealtimeRuntimeError,
   ClientServerMember,
   ClientPresenceUpdatedEventPayload,
   ClientCurrentVoiceState,
@@ -59,6 +60,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   const membersErrorMessage = ref<string | null>(null);
   const moderationErrorMessage = ref<string | null>(null);
   const presenceErrorMessage = ref<string | null>(null);
+  const realtimeError = ref<ClientRealtimeRuntimeError | null>(null);
   const presenceMembers = ref<ClientRuntimePresenceMember[]>([]);
   const members = ref<ClientServerMember[]>([]);
   const activeVoicePresence = ref<ClientActiveVoicePresence | null>(null);
@@ -90,6 +92,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
 
     return screenShareStates.value.find((state) => state.userId === currentUserId) ?? null;
   });
+  const realtimeErrorMessage = computed(() => realtimeError.value?.message ?? null);
 
   /**
    * Синхронизирует выбор сервера с доступным списком серверов пользователя.
@@ -178,6 +181,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     membersErrorMessage.value = null;
     moderationErrorMessage.value = null;
     presenceErrorMessage.value = null;
+    realtimeError.value = null;
     presenceMembers.value = [];
     members.value = [];
     activeVoicePresence.value = null;
@@ -337,6 +341,31 @@ export const useServerModuleStore = defineStore("serverModule", () => {
    */
   function clearPresenceError(): void {
     presenceErrorMessage.value = null;
+  }
+
+  /**
+   * Применяет структурированную realtime-ошибку к app-side store и видимому UI-сообщению.
+   */
+  function handleRealtimeRuntimeError(error: ClientRealtimeRuntimeError | null): void {
+    const previousMessage = realtimeError.value?.message ?? null;
+    realtimeError.value = error;
+
+    if (!error) {
+      if (presenceErrorMessage.value === previousMessage) {
+        presenceErrorMessage.value = null;
+      }
+
+      return;
+    }
+
+    presenceErrorMessage.value = error.message;
+  }
+
+  /**
+   * Очищает последнее структурированное realtime-сообщение об ошибке.
+   */
+  function clearRealtimeRuntimeError(): void {
+    handleRealtimeRuntimeError(null);
   }
 
   /**
@@ -1107,6 +1136,8 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     membersErrorMessage,
     moderationErrorMessage,
     presenceErrorMessage,
+    realtimeError,
+    realtimeErrorMessage,
     presenceMembers,
     members,
     activeVoicePresence,
@@ -1144,8 +1175,10 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     clearScreenShareStreams,
     handleScreenShareCaptureFailure,
     handleRealtimeConnectionInterrupted,
+    handleRealtimeRuntimeError,
     handleServerAccessRevoked,
     handleForcedDisconnect,
+    clearRealtimeRuntimeError,
     clearCurrentUserPresenceLocally,
     clearChannelsError,
     clearServerUpdateError,

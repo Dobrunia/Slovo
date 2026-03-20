@@ -10,6 +10,10 @@ import {
   subscribeToVoiceSession,
   subscribeToVoiceSignaling,
 } from "./runtime";
+import {
+  ensureRemoteAudioPlayback,
+  releaseRemoteAudioPlayback,
+} from "./mediaPlayback";
 import type {
   ClientActiveVoicePresence,
   ClientCurrentVoiceState,
@@ -317,7 +321,7 @@ class VoiceChannelSession {
       remoteConsumer.audioElement.muted = nextState.deafened;
 
       if (!nextState.deafened) {
-        void remoteConsumer.audioElement.play().catch(() => {});
+        await ensureRemoteAudioPlayback(remoteConsumer.audioElement);
       }
     }
   }
@@ -782,6 +786,10 @@ class VoiceChannelSession {
       audioElement,
     });
 
+    if (audioElement && !this.currentVoiceState.deafened) {
+      await ensureRemoteAudioPlayback(audioElement);
+    }
+
     if (consumeResponse.mediaType === "screen") {
       this.notifyScreenShareStreamsChanged();
     }
@@ -799,6 +807,7 @@ class VoiceChannelSession {
 
     remoteConsumer.consumer.close();
     if (remoteConsumer.audioElement) {
+      releaseRemoteAudioPlayback(remoteConsumer.audioElement);
       remoteConsumer.audioElement.pause();
       remoteConsumer.audioElement.srcObject = null;
     }
@@ -910,7 +919,6 @@ function createAudioElement(input: {
   audioElement.setAttribute("playsinline", "true");
   audioElement.muted = input.muted;
   audioElement.srcObject = input.stream;
-  void audioElement.play().catch(() => {});
 
   return audioElement;
 }

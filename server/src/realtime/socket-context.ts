@@ -12,7 +12,6 @@ type SocketHandshakeLike =
       address?: string;
       headers?: Record<string, string | string[] | undefined>;
       auth?: Record<string, unknown>;
-      query?: Record<string, unknown>;
     }
   | undefined;
 
@@ -54,12 +53,9 @@ export async function resolveRealtimeSocketUserId(args: {
   appendSocketHandshakeHeaders(headers, args.handshake?.headers);
 
   const authSessionToken = readHandshakeSessionToken(args.handshake?.auth);
-  const querySessionToken = readHandshakeSessionToken(args.handshake?.query);
 
   if (authSessionToken) {
     headers.set("x-session-token", authSessionToken);
-  } else if (querySessionToken) {
-    headers.set("x-session-token", querySessionToken);
   }
 
   return resolveSessionUserId({
@@ -89,7 +85,7 @@ function appendSocketHandshakeHeaders(
 }
 
 /**
- * Считывает session token из auth/query-объекта handshake, если он там есть.
+ * Считывает session token из auth-объекта handshake, если он там есть.
  */
 function readHandshakeSessionToken(
   source: Record<string, unknown> | undefined,

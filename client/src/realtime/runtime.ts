@@ -5,10 +5,17 @@ import {
 import { createSocketIoClientTransport } from "dobrunia-liverail-client/socket-io";
 import { DEFAULT_CLIENT_REALTIME_URL } from "../constants";
 import { slovoRealtimeRegistry } from "./contracts";
+import {
+  clearRealtimeError,
+  createRealtimeRuntimeError,
+  reportRealtimeError,
+  subscribeToRealtimeErrors,
+} from "./errors";
 import type {
   ClientForcedDisconnectEventPayload,
   ClientPresenceUpdatedEventPayload,
   ClientChannelsUpdatedEventPayload,
+  ClientRealtimeRuntimeError,
   ClientScreenShareUpdatedEventPayload,
   ClientServerUpdatedEventPayload,
   ClientUserServersUpdatedEventPayload,
@@ -61,6 +68,8 @@ type RealtimeConnectionStateSubscriptionInput = {
 let runtime: SlovoRealtimeRuntime | null = null;
 let runtimeSessionToken: string | null = null;
 
+export { subscribeToRealtimeErrors };
+
 /**
  * Полностью уничтожает текущий client-side realtime runtime.
  */
@@ -68,6 +77,15 @@ export function resetRealtimeRuntime(): void {
   runtime?.destroy();
   runtime = null;
   runtimeSessionToken = null;
+}
+
+/**
+ * Очищает последнее app-side realtime runtime сообщение об ошибке.
+ */
+export function clearRealtimeRuntimeError(
+  scope?: ClientRealtimeRuntimeError["scope"],
+): void {
+  clearRealtimeError(scope);
 }
 
 /**
@@ -92,29 +110,26 @@ export function subscribeToRealtimeConnectionState(
 export async function subscribeToServerStructure(
   input: ServerStructureSubscriptionInput,
 ): Promise<() => Promise<void>> {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-  const channelKey = {
-    serverId: input.serverId,
-  };
-
-  const stopServerUpdated = currentRuntime.onEvent("server.updated", (payload) => {
-    if (payload.serverId === input.serverId) {
-      input.onServerUpdated(payload);
-    }
+  return subscribeToChannelEvents({
+    sessionToken: input.sessionToken,
+    channelName: "server.structure",
+    channelKey: {
+      serverId: input.serverId,
+    },
+    fallbackMessage: "Не удалось подписаться на realtime структуры сервера.",
+    registerListeners: (currentRuntime) => [
+      currentRuntime.onEvent("server.updated", (payload) => {
+        if (payload.serverId === input.serverId) {
+          input.onServerUpdated(payload);
+        }
+      }),
+      currentRuntime.onEvent("channels.updated", (payload) => {
+        if (payload.serverId === input.serverId) {
+          input.onChannelsUpdated(payload);
+        }
+      }),
+    ],
   });
-  const stopChannelsUpdated = currentRuntime.onEvent("channels.updated", (payload) => {
-    if (payload.serverId === input.serverId) {
-      input.onChannelsUpdated(payload);
-    }
-  });
-
-  await currentRuntime.subscribeChannel("server.structure", channelKey);
-
-  return async () => {
-    stopServerUpdated();
-    stopChannelsUpdated();
-    await currentRuntime.unsubscribeChannel("server.structure", channelKey);
-  };
 }
 
 /**
@@ -123,22 +138,21 @@ export async function subscribeToServerStructure(
 export async function subscribeToServerPresence(
   input: ServerPresenceSubscriptionInput,
 ): Promise<() => Promise<void>> {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-  const channelKey = {
-    serverId: input.serverId,
-  };
-  const stopPresenceUpdated = currentRuntime.onEvent("presence.updated", (payload) => {
-    if (payload.serverId === input.serverId) {
-      input.onPresenceUpdated(payload);
-    }
+  return subscribeToChannelEvents({
+    sessionToken: input.sessionToken,
+    channelName: "server.presence",
+    channelKey: {
+      serverId: input.serverId,
+    },
+    fallbackMessage: "Не удалось подписаться на realtime присутствия сервера.",
+    registerListeners: (currentRuntime) => [
+      currentRuntime.onEvent("presence.updated", (payload) => {
+        if (payload.serverId === input.serverId) {
+          input.onPresenceUpdated(payload);
+        }
+      }),
+    ],
   });
-
-  await currentRuntime.subscribeChannel("server.presence", channelKey);
-
-  return async () => {
-    stopPresenceUpdated();
-    await currentRuntime.unsubscribeChannel("server.presence", channelKey);
-  };
 }
 
 /**
@@ -147,28 +161,26 @@ export async function subscribeToServerPresence(
 export async function subscribeToCurrentUserProfile(
   input: UserProfileSubscriptionInput,
 ): Promise<() => Promise<void>> {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-  const channelKey = {
-    userId: input.userId,
-  };
-  const stopUserServersUpdated = currentRuntime.onEvent("user-servers.updated", (payload) => {
-    if (payload.userId === input.userId) {
-      input.onUserServersUpdated(payload);
-    }
+  return subscribeToChannelEvents({
+    sessionToken: input.sessionToken,
+    channelName: "user.profile",
+    channelKey: {
+      userId: input.userId,
+    },
+    fallbackMessage: "Не удалось подписаться на пользовательский realtime-профиль.",
+    registerListeners: (currentRuntime) => [
+      currentRuntime.onEvent("user-servers.updated", (payload) => {
+        if (payload.userId === input.userId) {
+          input.onUserServersUpdated(payload);
+        }
+      }),
+      currentRuntime.onEvent("forced-disconnect", (payload) => {
+        if (payload.userId === input.userId) {
+          input.onForcedDisconnect(payload);
+        }
+      }),
+    ],
   });
-  const stopForcedDisconnect = currentRuntime.onEvent("forced-disconnect", (payload) => {
-    if (payload.userId === input.userId) {
-      input.onForcedDisconnect(payload);
-    }
-  });
-
-  await currentRuntime.subscribeChannel("user.profile", channelKey);
-
-  return async () => {
-    stopUserServersUpdated();
-    stopForcedDisconnect();
-    await currentRuntime.unsubscribeChannel("user.profile", channelKey);
-  };
 }
 
 /**
@@ -177,29 +189,25 @@ export async function subscribeToCurrentUserProfile(
 export async function subscribeToVoiceSignaling(
   input: VoiceSignalingSubscriptionInput,
 ): Promise<() => Promise<void>> {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-  const channelKey = {
-    serverId: input.serverId,
-    channelId: input.channelId,
-  };
-  const stopVoiceSessionSignaled = currentRuntime.onEvent(
-    "voice-session.signaled",
-    (payload) => {
-      if (
-        payload.serverId === input.serverId &&
-        payload.channelId === input.channelId
-      ) {
-        input.onVoiceSessionSignaled(payload);
-      }
+  return subscribeToChannelEvents({
+    sessionToken: input.sessionToken,
+    channelName: "voice.signaling",
+    channelKey: {
+      serverId: input.serverId,
+      channelId: input.channelId,
     },
-  );
-
-  await currentRuntime.subscribeChannel("voice.signaling", channelKey);
-
-  return async () => {
-    stopVoiceSessionSignaled();
-    await currentRuntime.unsubscribeChannel("voice.signaling", channelKey);
-  };
+    fallbackMessage: "Не удалось подписаться на voice signaling канала.",
+    registerListeners: (currentRuntime) => [
+      currentRuntime.onEvent("voice-session.signaled", (payload) => {
+        if (
+          payload.serverId === input.serverId &&
+          payload.channelId === input.channelId
+        ) {
+          input.onVoiceSessionSignaled(payload);
+        }
+      }),
+    ],
+  });
 }
 
 /**
@@ -208,35 +216,33 @@ export async function subscribeToVoiceSignaling(
 export async function subscribeToVoiceSession(
   input: VoiceSessionSubscriptionInput,
 ): Promise<() => Promise<void>> {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-  const channelKey = {
-    serverId: input.serverId,
-    channelId: input.channelId,
-  };
-  const stopVoiceStateUpdated = currentRuntime.onEvent("voice-state.updated", (payload) => {
-    if (
-      payload.serverId === input.serverId &&
-      payload.channelId === input.channelId
-    ) {
-      input.onVoiceStateUpdated(payload);
-    }
+  return subscribeToChannelEvents({
+    sessionToken: input.sessionToken,
+    channelName: "voice.session",
+    channelKey: {
+      serverId: input.serverId,
+      channelId: input.channelId,
+    },
+    fallbackMessage: "Не удалось подписаться на voice session канала.",
+    registerListeners: (currentRuntime) => [
+      currentRuntime.onEvent("voice-state.updated", (payload) => {
+        if (
+          payload.serverId === input.serverId &&
+          payload.channelId === input.channelId
+        ) {
+          input.onVoiceStateUpdated(payload);
+        }
+      }),
+      currentRuntime.onEvent("screen-share.updated", (payload) => {
+        if (
+          payload.serverId === input.serverId &&
+          payload.channelId === input.channelId
+        ) {
+          input.onScreenShareUpdated(payload);
+        }
+      }),
+    ],
   });
-  const stopScreenShareUpdated = currentRuntime.onEvent("screen-share.updated", (payload) => {
-    if (
-      payload.serverId === input.serverId &&
-      payload.channelId === input.channelId
-    ) {
-      input.onScreenShareUpdated(payload);
-    }
-  });
-
-  await currentRuntime.subscribeChannel("voice.session", channelKey);
-
-  return async () => {
-    stopVoiceStateUpdated();
-    stopScreenShareUpdated();
-    await currentRuntime.unsubscribeChannel("voice.session", channelKey);
-  };
 }
 
 /**
@@ -247,11 +253,14 @@ export async function executeJoinVoiceChannelCommand(input: {
   serverId: string;
   channelId: string;
 }) {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-
-  return currentRuntime.executeCommand("voice.join-channel", {
-    serverId: input.serverId,
-    channelId: input.channelId,
+  return executeRealtimeCommand({
+    sessionToken: input.sessionToken,
+    commandName: "voice.join-channel",
+    payload: {
+      serverId: input.serverId,
+      channelId: input.channelId,
+    },
+    fallbackMessage: "Не удалось выполнить вход в голосовой канал.",
   });
 }
 
@@ -263,11 +272,14 @@ export async function executeLeaveVoiceChannelCommand(input: {
   serverId: string;
   channelId: string;
 }) {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-
-  return currentRuntime.executeCommand("voice.leave-channel", {
-    serverId: input.serverId,
-    channelId: input.channelId,
+  return executeRealtimeCommand({
+    sessionToken: input.sessionToken,
+    commandName: "voice.leave-channel",
+    payload: {
+      serverId: input.serverId,
+      channelId: input.channelId,
+    },
+    fallbackMessage: "Не удалось выполнить выход из голосового канала.",
   });
 }
 
@@ -280,12 +292,15 @@ export async function executeMoveVoiceChannelCommand(input: {
   channelId: string;
   targetChannelId: string;
 }) {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-
-  return currentRuntime.executeCommand("voice.move-channel", {
-    serverId: input.serverId,
-    channelId: input.channelId,
-    targetChannelId: input.targetChannelId,
+  return executeRealtimeCommand({
+    sessionToken: input.sessionToken,
+    commandName: "voice.move-channel",
+    payload: {
+      serverId: input.serverId,
+      channelId: input.channelId,
+      targetChannelId: input.targetChannelId,
+    },
+    fallbackMessage: "Не удалось выполнить переход между голосовыми каналами.",
   });
 }
 
@@ -298,12 +313,15 @@ export async function executeSetSelfMuteCommand(input: {
   channelId: string;
   muted: boolean;
 }) {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-
-  return currentRuntime.executeCommand("voice.set-self-mute", {
-    serverId: input.serverId,
-    channelId: input.channelId,
-    muted: input.muted,
+  return executeRealtimeCommand({
+    sessionToken: input.sessionToken,
+    commandName: "voice.set-self-mute",
+    payload: {
+      serverId: input.serverId,
+      channelId: input.channelId,
+      muted: input.muted,
+    },
+    fallbackMessage: "Не удалось изменить состояние микрофона.",
   });
 }
 
@@ -316,12 +334,15 @@ export async function executeSetSelfDeafenCommand(input: {
   channelId: string;
   deafened: boolean;
 }) {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-
-  return currentRuntime.executeCommand("voice.set-self-deafen", {
-    serverId: input.serverId,
-    channelId: input.channelId,
-    deafened: input.deafened,
+  return executeRealtimeCommand({
+    sessionToken: input.sessionToken,
+    commandName: "voice.set-self-deafen",
+    payload: {
+      serverId: input.serverId,
+      channelId: input.channelId,
+      deafened: input.deafened,
+    },
+    fallbackMessage: "Не удалось изменить состояние наушников.",
   });
 }
 
@@ -334,12 +355,15 @@ export async function executeSetScreenShareActiveCommand(input: {
   channelId: string;
   active: boolean;
 }) {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-
-  return currentRuntime.executeCommand("voice.set-screen-share-active", {
-    serverId: input.serverId,
-    channelId: input.channelId,
-    active: input.active,
+  return executeRealtimeCommand({
+    sessionToken: input.sessionToken,
+    commandName: "voice.set-screen-share-active",
+    payload: {
+      serverId: input.serverId,
+      channelId: input.channelId,
+      active: input.active,
+    },
+    fallbackMessage: "Не удалось изменить состояние демонстрации экрана.",
   });
 }
 
@@ -354,14 +378,17 @@ export async function executeSignalVoiceSessionCommand(input: {
   signalType: string;
   payloadJson: string;
 }) {
-  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
-
-  return currentRuntime.executeCommand("voice.signal-session", {
-    serverId: input.serverId,
-    channelId: input.channelId,
-    targetUserId: input.targetUserId,
-    signalType: input.signalType,
-    payloadJson: input.payloadJson,
+  return executeRealtimeCommand({
+    sessionToken: input.sessionToken,
+    commandName: "voice.signal-session",
+    payload: {
+      serverId: input.serverId,
+      channelId: input.channelId,
+      targetUserId: input.targetUserId,
+      signalType: input.signalType,
+      payloadJson: input.payloadJson,
+    },
+    fallbackMessage: "Не удалось выполнить signaling-команду голосовой сессии.",
   });
 }
 
@@ -388,10 +415,92 @@ export function ensureRealtimeRuntime(sessionToken: string | null): SlovoRealtim
         : undefined,
     }),
     onError: (error) => {
-      console.error("Realtime runtime error", error);
+      reportRealtimeError(
+        createRealtimeRuntimeError({
+          scope: "transport",
+          error,
+          fallbackMessage: "Realtime transport завершился ошибкой.",
+        }),
+      );
     },
   });
   runtimeSessionToken = sessionToken;
 
   return runtime;
+}
+
+async function subscribeToChannelEvents<
+  TChannelName extends Parameters<SlovoRealtimeRuntime["subscribeChannel"]>[0],
+  TChannelKey extends Parameters<SlovoRealtimeRuntime["subscribeChannel"]>[1],
+>(input: {
+  sessionToken: string | null;
+  channelName: TChannelName;
+  channelKey: TChannelKey;
+  fallbackMessage: string;
+  registerListeners: (runtime: SlovoRealtimeRuntime) => Array<() => void>;
+}): Promise<() => Promise<void>> {
+  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
+  let subscribed = false;
+  let stopListeners: Array<() => void> = [];
+
+  try {
+    await currentRuntime.subscribeChannel(input.channelName, input.channelKey);
+    subscribed = true;
+    stopListeners = input.registerListeners(currentRuntime);
+    clearRealtimeError("subscription");
+
+    return async () => {
+      for (const stopListener of stopListeners) {
+        stopListener();
+      }
+
+      await currentRuntime.unsubscribeChannel(input.channelName, input.channelKey);
+    };
+  } catch (error) {
+    for (const stopListener of stopListeners) {
+      stopListener();
+    }
+
+    if (subscribed) {
+      await currentRuntime.unsubscribeChannel(input.channelName, input.channelKey).catch(
+        () => undefined,
+      );
+    }
+
+    reportRealtimeError(
+      createRealtimeRuntimeError({
+        scope: "subscription",
+        error,
+        fallbackMessage: input.fallbackMessage,
+      }),
+    );
+    throw error;
+  }
+}
+
+async function executeRealtimeCommand<
+  TCommandName extends Parameters<SlovoRealtimeRuntime["executeCommand"]>[0],
+  TPayload extends Parameters<SlovoRealtimeRuntime["executeCommand"]>[1],
+>(input: {
+  sessionToken: string | null;
+  commandName: TCommandName;
+  payload: TPayload;
+  fallbackMessage: string;
+}) {
+  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
+
+  try {
+    const result = await currentRuntime.executeCommand(input.commandName, input.payload);
+    clearRealtimeError("command");
+    return result;
+  } catch (error) {
+    reportRealtimeError(
+      createRealtimeRuntimeError({
+        scope: "command",
+        error,
+        fallbackMessage: input.fallbackMessage,
+      }),
+    );
+    throw error;
+  }
 }

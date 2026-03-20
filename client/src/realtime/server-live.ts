@@ -8,7 +8,14 @@ import { subscribeToServerPresence, subscribeToServerStructure } from "./runtime
 type StopSubscription = () => Promise<void>;
 
 /**
- * Входные параметры единой live-подписки на состояние выбранного сервера.
+ * Singleton-orchestration слой для home-экрана.
+ * Этот helper не является общим multi-consumer subscribe API: он сознательно держит
+ * один active/pending target на весь модуль и рассчитан только на одного владельца
+ * lifecycle в рамках текущего SPA-клиента.
+ */
+
+/**
+ * Входные параметры singleton-подписки на live-состояние выбранного сервера.
  */
 export interface SubscribeToServerLiveStateInput {
   sessionToken: string;
@@ -24,8 +31,9 @@ let pendingSubscriptionTarget: string | null = null;
 let pendingSubscriptionPromise: Promise<StopSubscription> | null = null;
 
 /**
- * Подписывает клиента на live-структуру и presence выбранного сервера без дублирования
- * одинаковых подписок на один и тот же session/server target.
+ * Подписывает singleton-orchestration слой на live-структуру и presence выбранного сервера.
+ * Функция дедуплицирует только один active/pending target и не предназначена
+ * для независимых параллельных потребителей.
  */
 export async function subscribeToServerLiveState(
   input: SubscribeToServerLiveStateInput,
