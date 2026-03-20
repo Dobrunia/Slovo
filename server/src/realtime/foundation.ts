@@ -73,6 +73,43 @@ type CreateRealtimeServerFoundationInput<TRegistry extends RealtimeRegistry> = {
   presenceRegistry?: RuntimePresenceRegistry;
 };
 
+type RealtimeSocketLike = {
+  id?: string;
+  data?: {
+    realtimeUserId?: string | null;
+    realtimeConnectedAt?: string;
+    realtimeUserAgent?: string | null;
+  };
+  handshake?: {
+    address?: string;
+    headers?: Record<string, string | string[] | undefined>;
+    auth?: Record<string, unknown>;
+    query?: Record<string, unknown>;
+  };
+};
+
+/**
+ * Строит единый realtime context из уже аутентифицированного Socket.IO-соединения.
+ */
+function createRealtimeContextFromSocket(socket: RealtimeSocketLike): RealtimeServerContext {
+  return createRealtimeServerContext({
+    connectionId: socket.id ?? "unknown-connection",
+    session: {
+      sessionId: null,
+    },
+    user: {
+      userId: socket.data?.realtimeUserId ?? null,
+    },
+    metadata: {
+      connectedAt: socket.data?.realtimeConnectedAt ?? new Date().toISOString(),
+      ipAddress: socket.handshake?.address ?? null,
+      userAgent:
+        socket.data?.realtimeUserAgent ??
+        resolveRealtimeUserAgent(socket.handshake?.headers),
+    },
+  });
+}
+
 /**
  * Собирает transport-agnostic LiveRail runtime и привязывает его к Socket.IO-серверу.
  */
@@ -91,6 +128,23 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
       credentials: true,
     },
   });
+
+  io.use((socket, next) => {
+    void resolveRealtimeSocketUserId({
+      dataLayer: input.dataLayer,
+      handshake: socket.handshake,
+    })
+      .then((userId) => {
+        socket.data.realtimeUserId = userId;
+        socket.data.realtimeConnectedAt = new Date().toISOString();
+        socket.data.realtimeUserAgent = resolveRealtimeUserAgent(socket.handshake?.headers);
+        next();
+      })
+      .catch((error) => {
+        next(error instanceof Error ? error : new Error("Realtime auth failed."));
+      });
+  });
+
   const eventRouters = createRealtimeEventRouters();
   const eventDeliverers = createRealtimeEventDeliverers(io);
   let runtime: ReturnType<typeof createServerRuntime<RealtimeServerContext, TRegistry>>;
@@ -131,7 +185,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         context: RealtimeServerContext;
       }) => {
         const userId = requireRealtimeUserId(context);
-        const previousPresence = presenceRegistry.getUserPresence(userId);
+        const previousPresence = presenceRegistry.getUserPresenceRecord(userId);
 
         const result = await joinVoiceChannelCommand({
           dataLayer: input.dataLayer,
@@ -143,16 +197,19 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
               { context } as never,
             ),
           userId,
+          connectionId: context.connection.id,
           serverId: commandInput.serverId,
           channelId: commandInput.channelId,
         });
 
-        const currentPresence = presenceRegistry.getUserPresence(userId);
+        const currentPresence = presenceRegistry.getUserPresenceRecord(userId);
 
         if (
           previousPresence &&
-          (previousPresence.serverId !== currentPresence?.serverId ||
-            previousPresence.channelId !== currentPresence?.channelId)
+          currentPresence &&
+          (previousPresence.connectionId !== currentPresence.connectionId ||
+            previousPresence.serverId !== currentPresence.serverId ||
+            previousPresence.channelId !== currentPresence.channelId)
         ) {
           await clearActiveScreenShare({
             screenShareRegistry,
@@ -160,7 +217,10 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
             serverId: previousPresence.serverId,
             channelId: previousPresence.channelId,
             teardownScreenShare: (payload) =>
-              mediaSignalingBridge.teardownUserScreenShare(payload),
+              mediaSignalingBridge.teardownUserScreenShare({
+                ...payload,
+                connectionId: previousPresence.connectionId,
+              }),
             emitScreenShareUpdated: (payload) =>
               runtime.emitEvent(
                 REALTIME_EVENT_NAMES.screenShareUpdated as never,
@@ -170,6 +230,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           });
           await mediaSignalingBridge.teardownUserSession({
             userId,
+            connectionId: previousPresence.connectionId,
             serverId: previousPresence.serverId,
             channelId: previousPresence.channelId,
           });
@@ -193,7 +254,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         context: RealtimeServerContext;
       }) => {
         const userId = requireRealtimeUserId(context);
-        const previousPresence = presenceRegistry.getUserPresence(userId);
+        const previousPresence = presenceRegistry.getUserPresenceRecord(userId);
 
         const result = await leaveVoiceChannelCommand({
           dataLayer: input.dataLayer,
@@ -205,6 +266,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
               { context } as never,
             ),
           userId,
+          connectionId: context.connection.id,
           serverId: commandInput.serverId,
           channelId: commandInput.channelId,
         });
@@ -216,7 +278,10 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
             serverId: previousPresence.serverId,
             channelId: previousPresence.channelId,
             teardownScreenShare: (payload) =>
-              mediaSignalingBridge.teardownUserScreenShare(payload),
+              mediaSignalingBridge.teardownUserScreenShare({
+                ...payload,
+                connectionId: previousPresence.connectionId,
+              }),
             emitScreenShareUpdated: (payload) =>
               runtime.emitEvent(
                 REALTIME_EVENT_NAMES.screenShareUpdated as never,
@@ -226,6 +291,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           });
           await mediaSignalingBridge.teardownUserSession({
             userId,
+            connectionId: previousPresence.connectionId,
             serverId: previousPresence.serverId,
             channelId: previousPresence.channelId,
           });
@@ -242,7 +308,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         context: RealtimeServerContext;
       }) => {
         const userId = requireRealtimeUserId(context);
-        const previousPresence = presenceRegistry.getUserPresence(userId);
+        const previousPresence = presenceRegistry.getUserPresenceRecord(userId);
 
         const result = await moveVoiceChannelCommand({
           dataLayer: input.dataLayer,
@@ -254,6 +320,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
               { context } as never,
             ),
           userId,
+          connectionId: context.connection.id,
           serverId: commandInput.serverId,
           channelId: commandInput.channelId,
           targetChannelId: commandInput.targetChannelId,
@@ -266,7 +333,10 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
             serverId: previousPresence.serverId,
             channelId: previousPresence.channelId,
             teardownScreenShare: (payload) =>
-              mediaSignalingBridge.teardownUserScreenShare(payload),
+              mediaSignalingBridge.teardownUserScreenShare({
+                ...payload,
+                connectionId: previousPresence.connectionId,
+              }),
             emitScreenShareUpdated: (payload) =>
               runtime.emitEvent(
                 REALTIME_EVENT_NAMES.screenShareUpdated as never,
@@ -276,6 +346,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           });
           await mediaSignalingBridge.teardownUserSession({
             userId,
+            connectionId: previousPresence.connectionId,
             serverId: previousPresence.serverId,
             channelId: previousPresence.channelId,
           });
@@ -306,6 +377,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           presenceRegistry,
           voiceStateRegistry,
           userId,
+          connectionId: context.connection.id,
           serverId: commandInput.serverId,
           channelId: commandInput.channelId,
           muted: commandInput.muted,
@@ -331,6 +403,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           presenceRegistry,
           voiceStateRegistry,
           userId,
+          connectionId: context.connection.id,
           serverId: commandInput.serverId,
           channelId: commandInput.channelId,
           deafened: commandInput.deafened,
@@ -356,6 +429,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           presenceRegistry,
           screenShareRegistry,
           userId,
+          connectionId: context.connection.id,
           serverId: commandInput.serverId,
           channelId: commandInput.channelId,
           active: commandInput.active,
@@ -386,6 +460,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
 
         return mediaSignalingBridge.handleSignal({
           userId,
+          connectionId: context.connection.id,
           command: commandInput,
         });
       },
@@ -396,91 +471,49 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
   const adapter = createSocketIoServerAdapter({
     io,
     runtime,
-    injectContext: async (socket: {
-      id?: string;
-      handshake?: {
-        address?: string;
-        headers?: Record<string, string | string[] | undefined>;
-        auth?: Record<string, unknown>;
-        query?: Record<string, unknown>;
-      };
-    }) => {
-      const userId = await resolveRealtimeSocketUserId({
-        dataLayer: input.dataLayer,
-        handshake: socket.handshake,
-      });
-
-      return (
-      createRealtimeServerContext({
-        connectionId: socket.id ?? "unknown-connection",
-        session: {
-          sessionId: null,
-        },
-        user: {
-          userId,
-        },
-        metadata: {
-          connectedAt: new Date().toISOString(),
-          ipAddress: socket.handshake?.address ?? null,
-          userAgent: resolveRealtimeUserAgent(socket.handshake?.headers),
-        },
-      })
-      );
-    },
+    injectContext: async (socket: RealtimeSocketLike) => createRealtimeContextFromSocket(socket),
   });
 
   io.on("connection", (socket) => {
     socket.on("disconnect", async () => {
-      const userId = await resolveRealtimeSocketUserId({
-        dataLayer: input.dataLayer,
-        handshake: socket.handshake,
-      });
-      const previousPresence = userId ? presenceRegistry.getUserPresence(userId) : null;
+      const userId = socket.data.realtimeUserId ?? null;
+      const connectionId = socket.id ?? "unknown-connection";
+      const previousPresence = userId ? presenceRegistry.getUserPresenceRecord(userId) : null;
 
-      if (!userId) {
+      if (!userId || !previousPresence || previousPresence.connectionId !== connectionId) {
         return;
       }
 
-      const context = createRealtimeServerContext({
-        connectionId: socket.id ?? "unknown-connection",
-        session: {
-          sessionId: null,
-        },
-        user: {
-          userId,
-        },
-        metadata: {
-          connectedAt: new Date().toISOString(),
-          ipAddress: socket.handshake.address ?? null,
-          userAgent: resolveRealtimeUserAgent(socket.handshake.headers),
-        },
-      });
+      const context = createRealtimeContextFromSocket(socket);
 
-      if (previousPresence) {
-        await clearActiveScreenShare({
-          screenShareRegistry,
-          userId,
-          serverId: previousPresence.serverId,
-          channelId: previousPresence.channelId,
-          teardownScreenShare: (payload) =>
-            mediaSignalingBridge.teardownUserScreenShare(payload),
-          emitScreenShareUpdated: (payload) =>
-            runtime.emitEvent(
-              REALTIME_EVENT_NAMES.screenShareUpdated as never,
-              payload as never,
-              { context } as never,
-            ),
-        });
-        await mediaSignalingBridge.teardownUserSession({
-          userId,
-          serverId: previousPresence.serverId,
-          channelId: previousPresence.channelId,
-        });
-      }
+      await clearActiveScreenShare({
+        screenShareRegistry,
+        userId,
+        serverId: previousPresence.serverId,
+        channelId: previousPresence.channelId,
+        teardownScreenShare: (payload) =>
+          mediaSignalingBridge.teardownUserScreenShare({
+            ...payload,
+            connectionId,
+          }),
+        emitScreenShareUpdated: (payload) =>
+          runtime.emitEvent(
+            REALTIME_EVENT_NAMES.screenShareUpdated as never,
+            payload as never,
+            { context } as never,
+          ),
+      });
+      await mediaSignalingBridge.teardownUserSession({
+        userId,
+        connectionId,
+        serverId: previousPresence.serverId,
+        channelId: previousPresence.channelId,
+      });
       voiceStateRegistry.clearState(userId);
 
       await handleRealtimeDisconnectCleanup({
         userId,
+        connectionId,
         presenceRegistry,
         emitPresenceUpdated: (payload) =>
           runtime.emitEvent(

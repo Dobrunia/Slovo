@@ -58,7 +58,11 @@ test("should respond with router capabilities and WebRTC transport params throug
           displayName: "Dobrynya",
           avatarUrl: null,
           joinedAt: "2026-03-19T10:00:00.000Z",
+          connectionId: "connection-1",
         };
+      },
+      getUserPresenceRecord(userId: string) {
+        return this.getUserPresence(userId);
       },
       clearPresence() {
         return null;
@@ -71,6 +75,7 @@ test("should respond with router capabilities and WebRTC transport params throug
 
   await bridge.handleSignal({
     userId: "user-1",
+    connectionId: "connection-1",
     command: {
       serverId: "server-1",
       channelId: "channel-1",
@@ -81,6 +86,7 @@ test("should respond with router capabilities and WebRTC transport params throug
   });
   await bridge.handleSignal({
     userId: "user-1",
+    connectionId: "connection-1",
     command: {
       serverId: "server-1",
       channelId: "channel-1",
@@ -156,7 +162,11 @@ test("should connect only the owner's transport and acknowledge the signaling co
           displayName: "Dobrynya",
           avatarUrl: null,
           joinedAt: "2026-03-19T10:00:00.000Z",
+          connectionId: "connection-1",
         };
+      },
+      getUserPresenceRecord() {
+        return this.getUserPresence();
       },
       clearPresence() {
         return null;
@@ -169,6 +179,7 @@ test("should connect only the owner's transport and acknowledge the signaling co
 
   await bridge.handleSignal({
     userId: "user-1",
+    connectionId: "connection-1",
     command: {
       serverId: "server-1",
       channelId: "channel-1",
@@ -179,6 +190,7 @@ test("should connect only the owner's transport and acknowledge the signaling co
   });
   const ack = await bridge.handleSignal({
     userId: "user-1",
+    connectionId: "connection-1",
     command: {
       serverId: "server-1",
       channelId: "channel-1",
@@ -223,6 +235,9 @@ test("should reject signaling from a user who is not in the active voice channel
       getUserPresence() {
         return null;
       },
+      getUserPresenceRecord() {
+        return null;
+      },
       clearPresence() {
         return null;
       },
@@ -236,6 +251,7 @@ test("should reject signaling from a user who is not in the active voice channel
     () =>
       bridge.handleSignal({
         userId: "user-1",
+        connectionId: "connection-1",
         command: {
           serverId: "server-1",
           channelId: "channel-1",

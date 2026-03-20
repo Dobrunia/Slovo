@@ -19,6 +19,7 @@ test("should keep only one active channel presence per user", () => {
     avatarUrl: null,
     serverId: "server-1",
     channelId: "channel-1",
+    connectionId: "connection-1",
     occurredAt: "2026-03-17T12:00:00.000Z",
   });
 
@@ -28,6 +29,7 @@ test("should keep only one active channel presence per user", () => {
     avatarUrl: null,
     serverId: "server-1",
     channelId: "channel-2",
+    connectionId: "connection-1",
     occurredAt: "2026-03-17T12:01:00.000Z",
   });
 
@@ -77,6 +79,7 @@ test("should expose both previous and next server snapshots for cross-server mov
     avatarUrl: "https://cdn.example.com/avatar.png",
     serverId: "server-1",
     channelId: "channel-1",
+    connectionId: "connection-1",
     occurredAt: "2026-03-17T12:00:00.000Z",
   });
   registry.setPresence({
@@ -85,6 +88,7 @@ test("should expose both previous and next server snapshots for cross-server mov
     avatarUrl: null,
     serverId: "server-1",
     channelId: "channel-2",
+    connectionId: "connection-2",
     occurredAt: "2026-03-17T12:00:30.000Z",
   });
 
@@ -94,6 +98,7 @@ test("should expose both previous and next server snapshots for cross-server mov
     avatarUrl: "https://cdn.example.com/avatar.png",
     serverId: "server-2",
     channelId: "channel-9",
+    connectionId: "connection-1",
     occurredAt: "2026-03-17T12:02:00.000Z",
   });
 
@@ -132,4 +137,57 @@ test("should expose both previous and next server snapshots for cross-server mov
     previousServerPresence: [],
   });
   assert.equal(registry.getUserPresence("user-1"), null);
+});
+
+/**
+ * Проверяется, что ownership текущего presence действительно привязан к realtime connection,
+ * а значит stale disconnect старой вкладки не может снести присутствие новой вкладки того же пользователя.
+ * Это важно, потому что после переподключения или открытия второй вкладки сервер должен различать,
+ * какой сокет сейчас владеет активным каналом пользователя.
+ */
+test("should keep the latest connection as the active presence owner", () => {
+  const registry = createRuntimePresenceRegistry();
+
+  registry.setPresence({
+    userId: "user-1",
+    displayName: "Добрыня",
+    avatarUrl: null,
+    serverId: "server-1",
+    channelId: "channel-1",
+    connectionId: "stale-connection",
+    occurredAt: "2026-03-17T12:00:00.000Z",
+  });
+  registry.setPresence({
+    userId: "user-1",
+    displayName: "Добрыня",
+    avatarUrl: null,
+    serverId: "server-1",
+    channelId: "channel-1",
+    connectionId: "fresh-connection",
+    occurredAt: "2026-03-17T12:01:00.000Z",
+  });
+
+  const staleRemoval = registry.clearPresenceForConnection({
+    userId: "user-1",
+    connectionId: "stale-connection",
+  });
+  const activeRecord = registry.getUserPresenceRecord("user-1");
+  const freshRemoval = registry.clearPresenceForConnection({
+    userId: "user-1",
+    connectionId: "fresh-connection",
+  });
+
+  assert.equal(staleRemoval, null);
+  assert.equal(activeRecord?.connectionId, "fresh-connection");
+  assert.deepEqual(freshRemoval, {
+    previous: {
+      userId: "user-1",
+      displayName: "Добрыня",
+      avatarUrl: null,
+      serverId: "server-1",
+      channelId: "channel-1",
+      joinedAt: "2026-03-17T12:00:00.000Z",
+    },
+    previousServerPresence: [],
+  });
 });

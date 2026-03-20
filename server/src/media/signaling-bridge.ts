@@ -45,6 +45,7 @@ type TransportRecord = {
   serverId: string;
   channelId: string;
   ownerUserId: string;
+  ownerConnectionId: string;
   direction: TransportDirection;
   transport: MediaWebRtcTransportLike;
 };
@@ -53,6 +54,7 @@ type ProducerRecord = {
   serverId: string;
   channelId: string;
   ownerUserId: string;
+  ownerConnectionId: string;
   mediaType: ProducerMediaType;
   producer: MediaProducerLike;
 };
@@ -61,6 +63,7 @@ type ConsumerRecord = {
   serverId: string;
   channelId: string;
   ownerUserId: string;
+  ownerConnectionId: string;
   producerId: string;
   mediaType: ProducerMediaType;
   consumer: MediaConsumerLike;
@@ -81,17 +84,20 @@ export interface CreateMediaSignalingBridgeInput {
 export interface MediaSignalingBridge {
   handleSignal(input: {
     userId: string;
+    connectionId: string;
     command: VoiceSignalCommandInput;
   }): Promise<VoiceSignalCommandAck>;
   teardownUserSession(input: {
     userId: string;
     serverId: string;
     channelId: string;
+    connectionId?: string | null;
   }): Promise<void>;
   teardownUserScreenShare(input: {
     userId: string;
     serverId: string;
     channelId: string;
+    connectionId?: string | null;
   }): Promise<void>;
   applyVoiceState(input: {
     userId: string;
@@ -113,9 +119,10 @@ export function createMediaSignalingBridge(
   const consumerRegistry = new Map<string, ConsumerRecord>();
 
   return {
-    async handleSignal({ userId, command }) {
-      assertUserInChannel({
+    async handleSignal({ userId, connectionId, command }) {
+      assertOwnedActivePresence({
         userId,
+        connectionId,
         serverId: command.serverId,
         channelId: command.channelId,
         presenceRegistry: input.presenceRegistry,
@@ -156,6 +163,7 @@ export function createMediaSignalingBridge(
             serverId: command.serverId,
             channelId: command.channelId,
             ownerUserId: userId,
+            ownerConnectionId: connectionId,
             direction,
             transport: createdTransport.transport,
           });
@@ -185,6 +193,7 @@ export function createMediaSignalingBridge(
             transportRegistry,
             transportId: payload.transportId,
             ownerUserId: userId,
+            ownerConnectionId: connectionId,
             serverId: command.serverId,
             channelId: command.channelId,
           });
@@ -220,6 +229,7 @@ export function createMediaSignalingBridge(
             transportRegistry,
             transportId: payload.transportId,
             ownerUserId: userId,
+            ownerConnectionId: connectionId,
             serverId: command.serverId,
             channelId: command.channelId,
             direction: "send",
@@ -251,6 +261,7 @@ export function createMediaSignalingBridge(
             serverId: command.serverId,
             channelId: command.channelId,
             ownerUserId: userId,
+            ownerConnectionId: connectionId,
             mediaType,
             producer,
           });
@@ -318,6 +329,7 @@ export function createMediaSignalingBridge(
             transportRegistry,
             transportId: payload.transportId,
             ownerUserId: userId,
+            ownerConnectionId: connectionId,
             serverId: command.serverId,
             channelId: command.channelId,
             direction: "recv",
@@ -346,9 +358,10 @@ export function createMediaSignalingBridge(
             serverId: command.serverId,
             channelId: command.channelId,
             ownerUserId: userId,
-              producerId: payload.producerId,
-              consumer,
-              mediaType: producerRecord.mediaType,
+            ownerConnectionId: connectionId,
+            producerId: payload.producerId,
+            consumer,
+            mediaType: producerRecord.mediaType,
             });
 
           await emitTargetedSignal({
@@ -390,7 +403,7 @@ export function createMediaSignalingBridge(
       };
     },
 
-    async teardownUserSession({ userId, serverId, channelId }) {
+    async teardownUserSession({ userId, serverId, channelId, connectionId = null }) {
       await teardownOwnedProducers({
         producerRegistry,
         consumerRegistry,
@@ -399,11 +412,13 @@ export function createMediaSignalingBridge(
         serverId,
         channelId,
         ownerUserId: userId,
+        ownerConnectionId: connectionId,
       });
 
       for (const [consumerId, consumerRecord] of Array.from(consumerRegistry.entries())) {
         if (
           consumerRecord.ownerUserId === userId &&
+          (connectionId === null || consumerRecord.ownerConnectionId === connectionId) &&
           consumerRecord.serverId === serverId &&
           consumerRecord.channelId === channelId
         ) {
@@ -415,6 +430,7 @@ export function createMediaSignalingBridge(
       for (const [transportId, transportRecord] of Array.from(transportRegistry.entries())) {
         if (
           transportRecord.ownerUserId === userId &&
+          (connectionId === null || transportRecord.ownerConnectionId === connectionId) &&
           transportRecord.serverId === serverId &&
           transportRecord.channelId === channelId
         ) {
@@ -424,7 +440,12 @@ export function createMediaSignalingBridge(
       }
     },
 
-    async teardownUserScreenShare({ userId, serverId, channelId }) {
+    async teardownUserScreenShare({
+      userId,
+      serverId,
+      channelId,
+      connectionId = null,
+    }) {
       await teardownOwnedScreenShare({
         producerRegistry,
         consumerRegistry,
@@ -433,6 +454,7 @@ export function createMediaSignalingBridge(
         serverId,
         channelId,
         ownerUserId: userId,
+        ownerConnectionId: connectionId,
       });
     },
 
@@ -471,6 +493,7 @@ function requireOwnedTransport(input: {
   transportRegistry: Map<string, TransportRecord>;
   transportId: string;
   ownerUserId: string;
+  ownerConnectionId: string;
   serverId: string;
   channelId: string;
   direction?: TransportDirection;
@@ -480,6 +503,7 @@ function requireOwnedTransport(input: {
   if (
     !transportRecord ||
     transportRecord.ownerUserId !== input.ownerUserId ||
+    transportRecord.ownerConnectionId !== input.ownerConnectionId ||
     transportRecord.serverId !== input.serverId ||
     transportRecord.channelId !== input.channelId ||
     (input.direction && transportRecord.direction !== input.direction)
@@ -605,11 +629,14 @@ async function teardownOwnedProducers(input: {
   serverId: string;
   channelId: string;
   ownerUserId: string;
+  ownerConnectionId?: string | null;
   mediaType?: ProducerMediaType;
 }): Promise<void> {
   const ownedProducerIds = Array.from(input.producerRegistry.entries())
     .filter(([, producerRecord]) =>
       producerRecord.ownerUserId === input.ownerUserId &&
+      (input.ownerConnectionId == null ||
+        producerRecord.ownerConnectionId === input.ownerConnectionId) &&
       producerRecord.serverId === input.serverId &&
       producerRecord.channelId === input.channelId &&
       (!input.mediaType || producerRecord.mediaType === input.mediaType),
@@ -660,6 +687,7 @@ async function teardownOwnedScreenShare(input: {
   serverId: string;
   channelId: string;
   ownerUserId: string;
+  ownerConnectionId?: string | null;
 }): Promise<void> {
   await teardownOwnedProducers({
     ...input,
@@ -700,20 +728,23 @@ async function emitTargetedSignal(input: {
 }
 
 /**
- * Проверяет, что пользователь действительно находится в текущем voice-канале.
+ * Проверяет, что пользователь действительно находится в текущем voice-канале
+ * и что signaling-команду отправляет именно owning realtime connection.
  */
-function assertUserInChannel(input: {
+function assertOwnedActivePresence(input: {
   userId: string;
+  connectionId: string;
   serverId: string;
   channelId: string;
   presenceRegistry: RuntimePresenceRegistry;
 }): void {
-  const currentPresence = input.presenceRegistry.getUserPresence(input.userId);
+  const currentPresence = input.presenceRegistry.getUserPresenceRecord(input.userId);
 
   if (
     !currentPresence ||
     currentPresence.serverId !== input.serverId ||
-    currentPresence.channelId !== input.channelId
+    currentPresence.channelId !== input.channelId ||
+    currentPresence.connectionId !== input.connectionId
   ) {
     throw new Error("Signaling доступен только из активного канала пользователя.");
   }

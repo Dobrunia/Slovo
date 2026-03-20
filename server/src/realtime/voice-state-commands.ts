@@ -27,6 +27,7 @@ type BaseVoiceStateCommandInput = {
   presenceRegistry: RuntimePresenceRegistry;
   voiceStateRegistry: RuntimeVoiceStateRegistry;
   userId: string;
+  connectionId: string;
   serverId: string;
   channelId: string;
   applyVoiceState: ApplyVoiceState;
@@ -94,15 +95,17 @@ export async function setSelfDeafenCommand(
 function requireActivePresence(input: {
   presenceRegistry: RuntimePresenceRegistry;
   userId: string;
+  connectionId: string;
   serverId: string;
   channelId: string;
 }) {
-  const currentPresence = input.presenceRegistry.getUserPresence(input.userId);
+  const currentPresence = input.presenceRegistry.getUserPresenceRecord(input.userId);
 
   if (
     !currentPresence ||
     currentPresence.serverId !== input.serverId ||
-    currentPresence.channelId !== input.channelId
+    currentPresence.channelId !== input.channelId ||
+    currentPresence.connectionId !== input.connectionId
   ) {
     throw new Error("Изменение voice state доступно только из активного канала.");
   }

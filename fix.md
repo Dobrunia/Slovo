@@ -1,0 +1,20 @@
+LiveRail Fix List
+
+## Critical Security
+- Отсутствуют.
+
+## Critical
+- Отсутствуют.
+
+## Important
+- Realtime auth transport / `server/src/realtime/socket-context.ts` Session token принимается не только из handshake auth, но и из query string. Почему это важно: bearer-like токен в URL легче утечет в логи, прокси, browser tooling и создает лишнюю auth surface без необходимости. Что исправить: удалить поддержку query-based session token и принимать токен только из auth/header path.
+- Client subscription lifecycle / `client/src/realtime/runtime.ts` Event listeners регистрируются до успешного `subscribeChannel`, а при ошибке подписки не откатываются. Почему это важно: временные ошибки subscribe могут накапливать слушатели и давать дублированную обработку событий и ложные симптомы нестабильности realtime. Что исправить: делать try/catch cleanup внутри каждой subscribe helper-функции или вынести подписку в атомарный helper, который сначала добивается subscribe, а потом публикует listeners.
+- Media playback guarantees / `client/src/realtime/voice-session.ts` Remote audio playback делает `audio.play().catch(() => {})` и полностью глотает ошибку autoplay/unlock. Почему это важно: пользователь может выглядеть подключенным к голосовому каналу, но реально ничего не слышать без явного сигнала об ошибке и без retry path. Что исправить: ввести явный media unlock/retry flow, отражать blocked playback в состоянии UI и не скрывать failure без реакции.
+- Signaling payload bounds / `server/src/realtime/contracts.ts`, `client/src/realtime/contracts.ts`, `server/src/media/signaling-bridge.ts` `payloadJson` и `signalType` принимаются как практически неограниченные строки. Почему это важно: realtime command path остается уязвимым к oversized payloads и лишней memory/CPU нагрузке, а runtime никак не фиксирует безопасные пределы. Что исправить: добавить строгие лимиты длины на signaling payload/type и отклонять oversized команды до парсинга.
+- Realtime error model / `client/src/realtime/runtime.ts` Неподключенческие realtime-ошибки только логируются через `console.error` и не попадают в единый app-side recovery path. Почему это важно: UI и store создают ложное ощущение надежности, хотя часть transport/signaling сбоев остается только в консоли. Что исправить: ввести структурированный error channel для runtime, связать его со store/UI и с политикой cleanup/retry.
+- Contract source of truth / `server/src/realtime/contracts.ts`, `client/src/realtime/contracts.ts` Один и тот же realtime contract поддерживается вручную в двух пакетах. Почему это важно: client/server могут разойтись семантически без немедленного очевидного сигнала, а текущая схема создает ложное чувство типобезопасности. Что исправить: сделать единый shared contract source или генерацию клиентских/серверных артефактов из одного источника.
+
+## Nice to Improve
+- Bundle hygiene / `client` build Основной клиентский bundle уже вышел за комфортный размер и собирается одним крупным chunk. Почему это важно: initial load и DX деградируют, а media/realtime код тянется даже туда, где он не нужен сразу. Что исправить: разделить media/realtime path на lazy chunks и проверить bundle analyzer-ом, что действительно попадает в initial graph.
+- Realtime helper API shape / `client/src/realtime/server-live.ts` Helper выглядит как переиспользуемая подписка, но внутри держит module-global singleton state и фактически поддерживает только одного потребителя. Почему это важно: abstraction обещает больше, чем реально гарантирует runtime, и это создаст скрытые конфликты при повторном использовании. Что исправить: сделать helper instance-scoped или переименовать/задокументировать его как singleton orchestration layer.
+- Shutdown lifecycle / `server/src/index.ts` Завершение процесса не выглядит полностью graceful и не явно дожидается завершения HTTP close-path. Почему это важно: на stop/restart можно получить недетерминированный teardown сокетов и in-flight запросов. Что исправить: сделать идемпотентный shutdown coordinator, дожидаться закрытия HTTP server и явно обработать повторные сигналы завершения.

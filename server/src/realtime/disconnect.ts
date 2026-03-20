@@ -8,14 +8,18 @@ export interface DisconnectPresenceMember {
   displayName: string;
   avatarUrl: string | null;
   joinedAt: string;
+  connectionId: string;
 }
 
 /**
  * Минимальный контракт presence registry, необходимый для disconnect cleanup.
  */
 export interface DisconnectPresenceRegistry {
-  getUserPresence(userId: string): DisconnectPresenceMember | null;
-  clearPresence(userId: string): unknown | null;
+  getUserPresenceRecord(userId: string): DisconnectPresenceMember | null;
+  clearPresenceForConnection(input: {
+    userId: string;
+    connectionId: string;
+  }): unknown | null;
 }
 
 /**
@@ -23,10 +27,11 @@ export interface DisconnectPresenceRegistry {
  */
 export interface HandleRealtimeDisconnectCleanupInput {
   userId: string;
+  connectionId: string;
   presenceRegistry: DisconnectPresenceRegistry;
   emitPresenceUpdated(payload: {
     serverId: string;
-    member: DisconnectPresenceMember;
+    member: Omit<DisconnectPresenceMember, "connectionId">;
     previousChannelId: string | null;
     action: "left";
     occurredAt: string;
@@ -40,13 +45,16 @@ export interface HandleRealtimeDisconnectCleanupInput {
 export async function handleRealtimeDisconnectCleanup(
   input: HandleRealtimeDisconnectCleanupInput,
 ): Promise<boolean> {
-  const previousPresence = input.presenceRegistry.getUserPresence(input.userId);
+  const previousPresence = input.presenceRegistry.getUserPresenceRecord(input.userId);
 
-  if (!previousPresence) {
+  if (!previousPresence || previousPresence.connectionId !== input.connectionId) {
     return false;
   }
 
-  const removalResult = input.presenceRegistry.clearPresence(input.userId);
+  const removalResult = input.presenceRegistry.clearPresenceForConnection({
+    userId: input.userId,
+    connectionId: input.connectionId,
+  });
 
   if (!removalResult) {
     return false;
@@ -54,7 +62,14 @@ export async function handleRealtimeDisconnectCleanup(
 
   await input.emitPresenceUpdated({
     serverId: previousPresence.serverId,
-    member: previousPresence,
+    member: {
+      userId: previousPresence.userId,
+      displayName: previousPresence.displayName,
+      avatarUrl: previousPresence.avatarUrl,
+      channelId: previousPresence.channelId,
+      joinedAt: previousPresence.joinedAt,
+      serverId: previousPresence.serverId,
+    },
     previousChannelId: previousPresence.channelId,
     action: "left",
     occurredAt: new Date().toISOString(),

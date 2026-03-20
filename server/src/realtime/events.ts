@@ -37,11 +37,24 @@ export function createRealtimeEventRouters(): Record<string, ServerEventRouter> 
       createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.serverPresence, {
         serverId: (payload as { serverId: string }).serverId,
       }),
-    [REALTIME_EVENT_NAMES.voiceSessionSignaled]: ({ payload }) =>
-      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.voiceSignaling, {
-        serverId: (payload as { serverId: string; channelId: string }).serverId,
-        channelId: (payload as { serverId: string; channelId: string }).channelId,
-      }),
+    [REALTIME_EVENT_NAMES.voiceSessionSignaled]: ({ payload }) => {
+      const voicePayload = payload as {
+        serverId: string;
+        channelId: string;
+        targetUserId: string | null;
+      };
+
+      if (voicePayload.targetUserId) {
+        return createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.userProfile, {
+          userId: voicePayload.targetUserId,
+        });
+      }
+
+      return createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.voiceSignaling, {
+        serverId: voicePayload.serverId,
+        channelId: voicePayload.channelId,
+      });
+    },
     [REALTIME_EVENT_NAMES.voiceStateUpdated]: ({ payload }) =>
       createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.voiceSession, {
         serverId: (payload as { serverId: string; channelId: string }).serverId,

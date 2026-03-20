@@ -19,6 +19,7 @@ type BaseVoiceCommandInput = {
   presenceRegistry: RuntimePresenceRegistry;
   emitPresenceUpdated: EmitPresenceUpdated;
   userId: string;
+  connectionId: string;
   serverId: string;
 };
 
@@ -64,6 +65,7 @@ export async function joinVoiceChannelCommand(
     avatarUrl: membership.user.avatarUrl,
     serverId: input.serverId,
     channelId: input.channelId,
+    connectionId: input.connectionId,
     occurredAt,
   });
 
@@ -122,7 +124,7 @@ export async function leaveVoiceChannelCommand(
     userId: input.userId,
   });
 
-  const currentPresence = input.presenceRegistry.getUserPresence(input.userId);
+  const currentPresence = input.presenceRegistry.getUserPresenceRecord(input.userId);
 
   if (!currentPresence) {
     return {
@@ -133,7 +135,8 @@ export async function leaveVoiceChannelCommand(
 
   if (
     currentPresence.serverId !== input.serverId ||
-    currentPresence.channelId !== input.channelId
+    currentPresence.channelId !== input.channelId ||
+    currentPresence.connectionId !== input.connectionId
   ) {
     throw new Error("Текущее присутствие пользователя уже изменилось.");
   }
@@ -162,7 +165,7 @@ export async function leaveVoiceChannelCommand(
 export async function moveVoiceChannelCommand(
   input: MoveVoiceChannelCommandInput,
 ): Promise<VoiceCommandAck> {
-  const currentPresence = input.presenceRegistry.getUserPresence(input.userId);
+  const currentPresence = input.presenceRegistry.getUserPresenceRecord(input.userId);
 
   if (!currentPresence) {
     throw new Error("Пользователь сейчас не находится в голосовом канале.");
@@ -170,7 +173,8 @@ export async function moveVoiceChannelCommand(
 
   if (
     currentPresence.serverId !== input.serverId ||
-    currentPresence.channelId !== input.channelId
+    currentPresence.channelId !== input.channelId ||
+    currentPresence.connectionId !== input.connectionId
   ) {
     throw new Error("Текущее присутствие пользователя уже изменилось.");
   }
@@ -180,6 +184,7 @@ export async function moveVoiceChannelCommand(
     presenceRegistry: input.presenceRegistry,
     emitPresenceUpdated: input.emitPresenceUpdated,
     userId: input.userId,
+    connectionId: input.connectionId,
     serverId: input.serverId,
     channelId: input.targetChannelId,
   });

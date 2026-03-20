@@ -27,6 +27,7 @@ type BaseScreenShareCommandInput = {
   presenceRegistry: RuntimePresenceRegistry;
   screenShareRegistry: RuntimeScreenShareRegistry;
   userId: string;
+  connectionId: string;
   serverId: string;
   channelId: string;
   emitScreenShareUpdated: EmitScreenShareUpdated;
@@ -131,15 +132,17 @@ export async function clearActiveScreenShare(input: {
 function requireActivePresence(input: {
   presenceRegistry: RuntimePresenceRegistry;
   userId: string;
+  connectionId: string;
   serverId: string;
   channelId: string;
 }) {
-  const currentPresence = input.presenceRegistry.getUserPresence(input.userId);
+  const currentPresence = input.presenceRegistry.getUserPresenceRecord(input.userId);
 
   if (
     !currentPresence ||
     currentPresence.serverId !== input.serverId ||
-    currentPresence.channelId !== input.channelId
+    currentPresence.channelId !== input.channelId ||
+    currentPresence.connectionId !== input.connectionId
   ) {
     throw new Error("Управление демонстрацией экрана доступно только из активного канала.");
   }

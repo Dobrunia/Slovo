@@ -7,6 +7,13 @@ export type RuntimePresenceMember = {
   joinedAt: string;
 };
 
+/**
+ * Внутреннее runtime-состояние присутствия с owner connection id.
+ */
+export type RuntimePresenceRecord = RuntimePresenceMember & {
+  connectionId: string;
+};
+
 export type RuntimePresenceMutation = {
   current: RuntimePresenceMember;
   previous: RuntimePresenceMember | null;
@@ -25,6 +32,7 @@ type SetRuntimePresenceInput = {
   avatarUrl: string | null;
   serverId: string;
   channelId: string;
+  connectionId: string;
   occurredAt?: string;
 };
 
@@ -32,13 +40,21 @@ type SetRuntimePresenceInput = {
  * Создает in-memory runtime registry присутствий пользователей в voice-каналах.
  */
 export function createRuntimePresenceRegistry() {
-  const presenceByUserId = new Map<string, RuntimePresenceMember>();
-  const presenceByServerId = new Map<string, Map<string, RuntimePresenceMember>>();
+  const presenceByUserId = new Map<string, RuntimePresenceRecord>();
+  const presenceByServerId = new Map<string, Map<string, RuntimePresenceRecord>>();
 
   /**
    * Возвращает текущее presence пользователя или `null`, если он не находится в канале.
    */
   function getUserPresence(userId: string): RuntimePresenceMember | null {
+    const record = presenceByUserId.get(userId) ?? null;
+    return record ? toPublicPresenceMember(record) : null;
+  }
+
+  /**
+   * Возвращает внутреннюю runtime-запись присутствия пользователя вместе с owner connection.
+   */
+  function getUserPresenceRecord(userId: string): RuntimePresenceRecord | null {
     return presenceByUserId.get(userId) ?? null;
   }
 
@@ -52,9 +68,9 @@ export function createRuntimePresenceRegistry() {
       return [];
     }
 
-    return Array.from(members.values()).sort((left, right) =>
-      left.joinedAt.localeCompare(right.joinedAt),
-    );
+    return Array.from(members.values())
+      .sort((left, right) => left.joinedAt.localeCompare(right.joinedAt))
+      .map((record) => toPublicPresenceMember(record));
   }
 
   /**
@@ -68,12 +84,13 @@ export function createRuntimePresenceRegistry() {
       previous.channelId === input.channelId
         ? previous.joinedAt
         : input.occurredAt ?? new Date().toISOString();
-    const current: RuntimePresenceMember = {
+    const current: RuntimePresenceRecord = {
       userId: input.userId,
       displayName: input.displayName,
       avatarUrl: input.avatarUrl,
       serverId: input.serverId,
       channelId: input.channelId,
+      connectionId: input.connectionId,
       joinedAt,
     };
 
@@ -85,8 +102,8 @@ export function createRuntimePresenceRegistry() {
     setServerPresence(current);
 
     return {
-      current,
-      previous,
+      current: toPublicPresenceMember(current),
+      previous: previous ? toPublicPresenceMember(previous) : null,
       currentServerPresence: getServerPresence(current.serverId),
       previousServerPresence:
         previous && previous.serverId !== current.serverId
@@ -109,9 +126,25 @@ export function createRuntimePresenceRegistry() {
     deleteServerPresence(previous.serverId, previous.userId);
 
     return {
-      previous,
+      previous: toPublicPresenceMember(previous),
       previousServerPresence: getServerPresence(previous.serverId),
     };
+  }
+
+  /**
+   * Удаляет presence только если оно все еще принадлежит указанному realtime connection.
+   */
+  function clearPresenceForConnection(input: {
+    userId: string;
+    connectionId: string;
+  }): RuntimePresenceRemoval | null {
+    const currentPresence = presenceByUserId.get(input.userId);
+
+    if (!currentPresence || currentPresence.connectionId !== input.connectionId) {
+      return null;
+    }
+
+    return clearPresence(input.userId);
   }
 
   /**
@@ -124,17 +157,20 @@ export function createRuntimePresenceRegistry() {
 
   return {
     getUserPresence,
+    getUserPresenceRecord,
     getServerPresence,
     setPresence,
     clearPresence,
+    clearPresenceForConnection,
     reset,
   };
 
   /**
    * Записывает пользователя в snapshot конкретного сервера.
    */
-  function setServerPresence(member: RuntimePresenceMember): void {
-    const members = presenceByServerId.get(member.serverId) ?? new Map<string, RuntimePresenceMember>();
+  function setServerPresence(member: RuntimePresenceRecord): void {
+    const members =
+      presenceByServerId.get(member.serverId) ?? new Map<string, RuntimePresenceRecord>();
     members.set(member.userId, member);
     presenceByServerId.set(member.serverId, members);
   }
@@ -155,6 +191,20 @@ export function createRuntimePresenceRegistry() {
       presenceByServerId.delete(serverId);
     }
   }
+}
+
+/**
+ * Убирает внутренние runtime-поля из presence-записи перед отдачей наружу.
+ */
+function toPublicPresenceMember(record: RuntimePresenceRecord): RuntimePresenceMember {
+  return {
+    userId: record.userId,
+    displayName: record.displayName,
+    avatarUrl: record.avatarUrl,
+    serverId: record.serverId,
+    channelId: record.channelId,
+    joinedAt: record.joinedAt,
+  };
 }
 
 /**
