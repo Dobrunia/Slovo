@@ -354,10 +354,10 @@ test("should regenerate an invite link through GraphQL and emit a server realtim
 
   users.push({
     id: "user-1",
-    email: "admin@example.com",
-    username: "admin",
+    email: "owner@example.com",
+    username: "owner",
     passwordHash: "stored-password-hash",
-    displayName: "Admin",
+    displayName: "Owner",
     avatarUrl: null,
     createdAt: new Date(),
     updatedAt: new Date(),
