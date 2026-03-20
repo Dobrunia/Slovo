@@ -6,6 +6,8 @@ import type {
   ClientPresenceUpdatedEventPayload,
   ClientChannelsUpdatedEventPayload,
   ClientServerUpdatedEventPayload,
+  ClientVoiceSessionSignaledEventPayload,
+  ClientVoiceStateUpdatedEventPayload,
 } from "../types/server";
 
 type SlovoRealtimeRuntime = ReturnType<typeof createClientRuntime<typeof slovoRealtimeRegistry>>;
@@ -21,6 +23,20 @@ type ServerPresenceSubscriptionInput = {
   sessionToken: string | null;
   serverId: string;
   onPresenceUpdated: (payload: ClientPresenceUpdatedEventPayload) => void;
+};
+
+type VoiceSignalingSubscriptionInput = {
+  sessionToken: string | null;
+  serverId: string;
+  channelId: string;
+  onVoiceSessionSignaled: (payload: ClientVoiceSessionSignaledEventPayload) => void;
+};
+
+type VoiceSessionSubscriptionInput = {
+  sessionToken: string | null;
+  serverId: string;
+  channelId: string;
+  onVoiceStateUpdated: (payload: ClientVoiceStateUpdatedEventPayload) => void;
 };
 
 let runtime: SlovoRealtimeRuntime | null = null;
@@ -91,6 +107,65 @@ export async function subscribeToServerPresence(
 }
 
 /**
+ * Подписывает клиента на signaling-события активного voice-канала.
+ */
+export async function subscribeToVoiceSignaling(
+  input: VoiceSignalingSubscriptionInput,
+): Promise<() => Promise<void>> {
+  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
+  const channelKey = {
+    serverId: input.serverId,
+    channelId: input.channelId,
+  };
+  const stopVoiceSessionSignaled = currentRuntime.onEvent(
+    "voice-session.signaled",
+    (payload) => {
+      if (
+        payload.serverId === input.serverId &&
+        payload.channelId === input.channelId
+      ) {
+        input.onVoiceSessionSignaled(payload);
+      }
+    },
+  );
+
+  await currentRuntime.subscribeChannel("voice.signaling", channelKey);
+
+  return async () => {
+    stopVoiceSessionSignaled();
+    await currentRuntime.unsubscribeChannel("voice.signaling", channelKey);
+  };
+}
+
+/**
+ * Подписывает клиента на voice session state активного канала.
+ */
+export async function subscribeToVoiceSession(
+  input: VoiceSessionSubscriptionInput,
+): Promise<() => Promise<void>> {
+  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
+  const channelKey = {
+    serverId: input.serverId,
+    channelId: input.channelId,
+  };
+  const stopVoiceStateUpdated = currentRuntime.onEvent("voice-state.updated", (payload) => {
+    if (
+      payload.serverId === input.serverId &&
+      payload.channelId === input.channelId
+    ) {
+      input.onVoiceStateUpdated(payload);
+    }
+  });
+
+  await currentRuntime.subscribeChannel("voice.session", channelKey);
+
+  return async () => {
+    stopVoiceStateUpdated();
+    await currentRuntime.unsubscribeChannel("voice.session", channelKey);
+  };
+}
+
+/**
  * Выполняет realtime-команду входа в голосовой канал.
  */
 export async function executeJoinVoiceChannelCommand(input: {
@@ -141,9 +216,67 @@ export async function executeMoveVoiceChannelCommand(input: {
 }
 
 /**
+ * Выполняет realtime-команду изменения self-mute состояния.
+ */
+export async function executeSetSelfMuteCommand(input: {
+  sessionToken: string | null;
+  serverId: string;
+  channelId: string;
+  muted: boolean;
+}) {
+  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
+
+  return currentRuntime.executeCommand("voice.set-self-mute", {
+    serverId: input.serverId,
+    channelId: input.channelId,
+    muted: input.muted,
+  });
+}
+
+/**
+ * Выполняет realtime-команду изменения self-deafen состояния.
+ */
+export async function executeSetSelfDeafenCommand(input: {
+  sessionToken: string | null;
+  serverId: string;
+  channelId: string;
+  deafened: boolean;
+}) {
+  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
+
+  return currentRuntime.executeCommand("voice.set-self-deafen", {
+    serverId: input.serverId,
+    channelId: input.channelId,
+    deafened: input.deafened,
+  });
+}
+
+/**
+ * Выполняет signaling-команду текущего voice session.
+ */
+export async function executeSignalVoiceSessionCommand(input: {
+  sessionToken: string | null;
+  serverId: string;
+  channelId: string;
+  targetUserId: string | null;
+  signalType: string;
+  payloadJson: string;
+}) {
+  const currentRuntime = ensureRealtimeRuntime(input.sessionToken);
+
+  return currentRuntime.executeCommand("voice.signal-session", {
+    serverId: input.serverId,
+    channelId: input.channelId,
+    targetUserId: input.targetUserId,
+    signalType: input.signalType,
+    payloadJson: input.payloadJson,
+  });
+}
+
+/**
  * Возвращает singleton realtime runtime для текущей auth-сессии.
  */
-function ensureRealtimeRuntime(sessionToken: string | null): SlovoRealtimeRuntime {
+export function ensureRealtimeRuntime(sessionToken: string | null): SlovoRealtimeRuntime {
   if (runtime && runtimeSessionToken === sessionToken) {
     return runtime;
   }

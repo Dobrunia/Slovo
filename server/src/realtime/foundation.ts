@@ -11,6 +11,7 @@ import type { DataLayer } from "../data/prisma.js";
 import type { MediaFoundation } from "../media/foundation.js";
 import { createMediaSignalingBridge } from "../media/signaling-bridge.js";
 import { createRuntimePresenceRegistry, type RuntimePresenceRegistry } from "./presence.js";
+import { createRuntimeVoiceStateRegistry } from "./voice-state.js";
 import { createRealtimeChannelJoinAuthorizers } from "./channel-access.js";
 import { handleRealtimeDisconnectCleanup } from "./disconnect.js";
 import { createRealtimeEventDeliverers, createRealtimeEventRouters } from "./events.js";
@@ -25,6 +26,10 @@ import {
   leaveVoiceChannelCommand,
   moveVoiceChannelCommand,
 } from "./voice-commands.js";
+import {
+  setSelfDeafenCommand,
+  setSelfMuteCommand,
+} from "./voice-state-commands.js";
 import {
   REALTIME_COMMAND_NAMES,
   REALTIME_EVENT_NAMES,
@@ -69,6 +74,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
   input: CreateRealtimeServerFoundationInput<TRegistry>,
 ) {
   const presenceRegistry = input.presenceRegistry ?? createRuntimePresenceRegistry();
+  const voiceStateRegistry = createRuntimeVoiceStateRegistry();
   const resolvedClientOrigin =
     input.clientOrigin ??
     (process.env.CLIENT_ORIGIN?.trim() || DEFAULT_CLIENT_ORIGIN);
@@ -118,8 +124,9 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         context: RealtimeServerContext;
       }) => {
         const userId = requireRealtimeUserId(context);
+        const previousPresence = presenceRegistry.getUserPresence(userId);
 
-        return joinVoiceChannelCommand({
+        const result = await joinVoiceChannelCommand({
           dataLayer: input.dataLayer,
           presenceRegistry,
           emitPresenceUpdated: (payload) =>
@@ -132,6 +139,30 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           serverId: commandInput.serverId,
           channelId: commandInput.channelId,
         });
+
+        const currentPresence = presenceRegistry.getUserPresence(userId);
+
+        if (
+          previousPresence &&
+          (previousPresence.serverId !== currentPresence?.serverId ||
+            previousPresence.channelId !== currentPresence?.channelId)
+        ) {
+          await mediaSignalingBridge.teardownUserSession({
+            userId,
+            serverId: previousPresence.serverId,
+            channelId: previousPresence.channelId,
+          });
+        }
+
+        if (currentPresence) {
+          voiceStateRegistry.syncPresence({
+            userId,
+            serverId: currentPresence.serverId,
+            channelId: currentPresence.channelId,
+          });
+        }
+
+        return result;
       },
       [REALTIME_COMMAND_NAMES.leaveVoiceChannel]: async ({
         input: commandInput,
@@ -141,8 +172,9 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         context: RealtimeServerContext;
       }) => {
         const userId = requireRealtimeUserId(context);
+        const previousPresence = presenceRegistry.getUserPresence(userId);
 
-        return leaveVoiceChannelCommand({
+        const result = await leaveVoiceChannelCommand({
           dataLayer: input.dataLayer,
           presenceRegistry,
           emitPresenceUpdated: (payload) =>
@@ -155,6 +187,17 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           serverId: commandInput.serverId,
           channelId: commandInput.channelId,
         });
+
+        if (previousPresence) {
+          await mediaSignalingBridge.teardownUserSession({
+            userId,
+            serverId: previousPresence.serverId,
+            channelId: previousPresence.channelId,
+          });
+        }
+        voiceStateRegistry.clearState(userId);
+
+        return result;
       },
       [REALTIME_COMMAND_NAMES.moveVoiceChannel]: async ({
         input: commandInput,
@@ -164,8 +207,9 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         context: RealtimeServerContext;
       }) => {
         const userId = requireRealtimeUserId(context);
+        const previousPresence = presenceRegistry.getUserPresence(userId);
 
-        return moveVoiceChannelCommand({
+        const result = await moveVoiceChannelCommand({
           dataLayer: input.dataLayer,
           presenceRegistry,
           emitPresenceUpdated: (payload) =>
@@ -178,6 +222,76 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           serverId: commandInput.serverId,
           channelId: commandInput.channelId,
           targetChannelId: commandInput.targetChannelId,
+        });
+
+        if (previousPresence) {
+          await mediaSignalingBridge.teardownUserSession({
+            userId,
+            serverId: previousPresence.serverId,
+            channelId: previousPresence.channelId,
+          });
+        }
+
+        const currentPresence = presenceRegistry.getUserPresence(userId);
+
+        if (currentPresence) {
+          voiceStateRegistry.syncPresence({
+            userId,
+            serverId: currentPresence.serverId,
+            channelId: currentPresence.channelId,
+          });
+        }
+
+        return result;
+      },
+      [REALTIME_COMMAND_NAMES.setSelfMute]: async ({
+        input: commandInput,
+        context,
+      }: {
+        input: { serverId: string; channelId: string; muted: boolean };
+        context: RealtimeServerContext;
+      }) => {
+        const userId = requireRealtimeUserId(context);
+
+        return setSelfMuteCommand({
+          presenceRegistry,
+          voiceStateRegistry,
+          userId,
+          serverId: commandInput.serverId,
+          channelId: commandInput.channelId,
+          muted: commandInput.muted,
+          applyVoiceState: (state) => mediaSignalingBridge.applyVoiceState(state),
+          emitVoiceStateUpdated: (payload) =>
+            runtime.emitEvent(
+              REALTIME_EVENT_NAMES.voiceStateUpdated as never,
+              payload as never,
+              { context } as never,
+            ),
+        });
+      },
+      [REALTIME_COMMAND_NAMES.setSelfDeafen]: async ({
+        input: commandInput,
+        context,
+      }: {
+        input: { serverId: string; channelId: string; deafened: boolean };
+        context: RealtimeServerContext;
+      }) => {
+        const userId = requireRealtimeUserId(context);
+
+        return setSelfDeafenCommand({
+          presenceRegistry,
+          voiceStateRegistry,
+          userId,
+          serverId: commandInput.serverId,
+          channelId: commandInput.channelId,
+          deafened: commandInput.deafened,
+          applyVoiceState: (state) => mediaSignalingBridge.applyVoiceState(state),
+          emitVoiceStateUpdated: (payload) =>
+            runtime.emitEvent(
+              REALTIME_EVENT_NAMES.voiceStateUpdated as never,
+              payload as never,
+              { context } as never,
+            ),
         });
       },
       [REALTIME_COMMAND_NAMES.signalVoiceSession]: async ({
@@ -246,6 +360,7 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         dataLayer: input.dataLayer,
         handshake: socket.handshake,
       });
+      const previousPresence = userId ? presenceRegistry.getUserPresence(userId) : null;
 
       if (!userId) {
         return;
@@ -265,6 +380,15 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           userAgent: resolveRealtimeUserAgent(socket.handshake.headers),
         },
       });
+
+      if (previousPresence) {
+        await mediaSignalingBridge.teardownUserSession({
+          userId,
+          serverId: previousPresence.serverId,
+          channelId: previousPresence.channelId,
+        });
+      }
+      voiceStateRegistry.clearState(userId);
 
       await handleRealtimeDisconnectCleanup({
         userId,

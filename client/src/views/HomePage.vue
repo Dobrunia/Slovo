@@ -14,7 +14,6 @@ import CurrentUserControlModule from "../modules/user/CurrentUserControlModule.v
 import { APP_HOME_ROUTE_PATH } from "../constants";
 import { APP_HOME_ROUTE_NAME } from "../router/serverRoutes";
 import {
-  buildAppServerChannelRoute,
   buildAppServerRoute,
   readInviteTokenFromRouteParams,
   readSelectedChannelIdFromRouteParams,
@@ -36,7 +35,8 @@ const serversStore = useServersStore();
 const serverModuleStore = useServerModuleStore();
 const availableServerIds = computed(() => serversStore.items.map((server) => server.id));
 const selectedServerId = computed(() => readSelectedServerIdFromRouteParams(route.params));
-const selectedChannelId = computed(() => readSelectedChannelIdFromRouteParams(route.params));
+const selectedChannelId = computed(() => serverModuleStore.selectedChannelId);
+const routeChannelId = computed(() => readSelectedChannelIdFromRouteParams(route.params));
 const selectedInviteToken = computed(() => readInviteTokenFromRouteParams(route.params));
 
 watch(
@@ -66,8 +66,22 @@ watch(
     );
 
     if (!hasSelectedChannel) {
-      void router.replace(buildAppServerRoute(currentSelectedServerId));
+      serverModuleStore.selectChannel(null);
     }
+  },
+);
+
+watch(
+  [selectedServerId, routeChannelId],
+  ([currentSelectedServerId, currentRouteChannelId]) => {
+    if (!currentSelectedServerId || !currentRouteChannelId) {
+      return;
+    }
+
+    void router.replace(buildAppServerRoute(currentSelectedServerId));
+  },
+  {
+    immediate: true,
   },
 );
 
@@ -87,10 +101,8 @@ watch(
 
 useHomePageRealtime({
   selectedServerId,
-  selectedChannelId,
   authStore,
   serverModuleStore,
-  router,
 });
 
 /**
@@ -138,7 +150,7 @@ function closeDiscovery(): void {
 }
 
 /**
- * Открывает выбранный канал в URL внутри текущего сервера.
+ * Подключает пользователя к выбранному каналу и сохраняет выбор в store.
  */
 async function handleSelectChannel(channelId: string): Promise<void> {
   if (!selectedServerId.value) {
@@ -151,7 +163,6 @@ async function handleSelectChannel(channelId: string): Promise<void> {
     }
 
     await serverModuleStore.joinOrMoveToChannel(channelId);
-    await router.replace(buildAppServerChannelRoute(selectedServerId.value, channelId));
   } catch {
     // Ошибка уже отражена в store и не должна всплывать как unhandled event error.
   }

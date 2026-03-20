@@ -37,6 +37,11 @@ export function createRealtimeEventRouters(): Record<string, ServerEventRouter> 
       createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.serverPresence, {
         serverId: (payload as { serverId: string }).serverId,
       }),
+    [REALTIME_EVENT_NAMES.voiceSessionSignaled]: ({ payload }) =>
+      createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.voiceSignaling, {
+        serverId: (payload as { serverId: string; channelId: string }).serverId,
+        channelId: (payload as { serverId: string; channelId: string }).channelId,
+      }),
     [REALTIME_EVENT_NAMES.voiceStateUpdated]: ({ payload }) =>
       createSocketIoChannelRoute(REALTIME_CHANNEL_NAMES.voiceSession, {
         serverId: (payload as { serverId: string; channelId: string }).serverId,
@@ -68,6 +73,7 @@ export function createRealtimeEventDeliverers(
     [REALTIME_EVENT_NAMES.serverUpdated]: sharedEventDeliverer,
     [REALTIME_EVENT_NAMES.channelsUpdated]: sharedEventDeliverer,
     [REALTIME_EVENT_NAMES.presenceUpdated]: sharedEventDeliverer,
+    [REALTIME_EVENT_NAMES.voiceSessionSignaled]: sharedEventDeliverer,
     [REALTIME_EVENT_NAMES.voiceStateUpdated]: sharedEventDeliverer,
     [REALTIME_EVENT_NAMES.screenShareUpdated]: sharedEventDeliverer,
     [REALTIME_EVENT_NAMES.forcedDisconnect]: sharedEventDeliverer,

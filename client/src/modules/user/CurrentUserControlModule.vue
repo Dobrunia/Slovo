@@ -15,8 +15,7 @@ import phoneDownIcon from "../../assets/icons/phone-down.svg";
 const router = useRouter();
 const authStore = useAuthStore();
 const serverModuleStore = useServerModuleStore();
-const isMicrophoneMuted = ref(false);
-const isHeadphonesMuted = ref(false);
+const isVoiceControlSubmitting = ref(false);
 
 /**
  * Отображаемое имя текущего пользователя.
@@ -37,6 +36,11 @@ const handle = computed(() => {
  * Есть ли у текущего пользователя активное presence в голосовом канале.
  */
 const hasActiveChannelPresence = computed(() => Boolean(serverModuleStore.currentUserPresence));
+const isMicrophoneMuted = computed(
+  () =>
+    serverModuleStore.currentVoiceState.muted || serverModuleStore.currentVoiceState.deafened,
+);
+const isHeadphonesMuted = computed(() => serverModuleStore.currentVoiceState.deafened);
 
 /**
  * Выводит пользователя из текущего канала и возвращает URL к серверу без channel route.
@@ -51,6 +55,44 @@ async function handleLeaveChannel(): Promise<void> {
     await router.replace(buildAppServerRoute(serverModuleStore.selectedServerId));
   } catch {
     // Ошибка уже отражена в store.
+  }
+}
+
+/**
+ * Переключает self-mute состояние текущего пользователя.
+ */
+async function handleToggleMicrophone(): Promise<void> {
+  if (!serverModuleStore.currentUserPresence || isVoiceControlSubmitting.value) {
+    return;
+  }
+
+  isVoiceControlSubmitting.value = true;
+
+  try {
+    await serverModuleStore.setSelfMuted(!serverModuleStore.currentVoiceState.muted);
+  } catch {
+    // Ошибка уже отражена в store.
+  } finally {
+    isVoiceControlSubmitting.value = false;
+  }
+}
+
+/**
+ * Переключает self-deafen состояние текущего пользователя.
+ */
+async function handleToggleHeadphones(): Promise<void> {
+  if (!serverModuleStore.currentUserPresence || isVoiceControlSubmitting.value) {
+    return;
+  }
+
+  isVoiceControlSubmitting.value = true;
+
+  try {
+    await serverModuleStore.setSelfDeafened(!serverModuleStore.currentVoiceState.deafened);
+  } catch {
+    // Ошибка уже отражена в store.
+  } finally {
+    isVoiceControlSubmitting.value = false;
   }
 }
 </script>
@@ -90,7 +132,7 @@ async function handleLeaveChannel(): Promise<void> {
         :label="isMicrophoneMuted ? 'Включить микрофон' : 'Выключить микрофон'"
         icon-alt=""
         :tone="isMicrophoneMuted ? 'danger' : 'default'"
-        @click="isMicrophoneMuted = !isMicrophoneMuted"
+        @click="handleToggleMicrophone"
       />
 
       <AppIconButton
@@ -98,7 +140,7 @@ async function handleLeaveChannel(): Promise<void> {
         :label="isHeadphonesMuted ? 'Включить звук' : 'Выключить звук'"
         icon-alt=""
         :tone="isHeadphonesMuted ? 'danger' : 'default'"
-        @click="isHeadphonesMuted = !isHeadphonesMuted"
+        @click="handleToggleHeadphones"
       />
     </div>
   </section>

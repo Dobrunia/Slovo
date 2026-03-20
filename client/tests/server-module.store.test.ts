@@ -10,12 +10,16 @@ const realtimeMocks = vi.hoisted(() => ({
   join: vi.fn(),
   leave: vi.fn(),
   move: vi.fn(),
+  setSelfMute: vi.fn(),
+  setSelfDeafen: vi.fn(),
 }));
 
 vi.mock("../src/realtime/runtime", () => ({
   executeJoinVoiceChannelCommand: realtimeMocks.join,
   executeLeaveVoiceChannelCommand: realtimeMocks.leave,
   executeMoveVoiceChannelCommand: realtimeMocks.move,
+  executeSetSelfMuteCommand: realtimeMocks.setSelfMute,
+  executeSetSelfDeafenCommand: realtimeMocks.setSelfDeafen,
 }));
 
 const testUser: ClientUser = {
@@ -33,6 +37,8 @@ describe("server module store", () => {
     realtimeMocks.join.mockReset();
     realtimeMocks.leave.mockReset();
     realtimeMocks.move.mockReset();
+    realtimeMocks.setSelfMute.mockReset();
+    realtimeMocks.setSelfDeafen.mockReset();
   });
 
   /**
@@ -878,6 +884,316 @@ describe("server module store", () => {
       sessionToken: "active-session-token",
       serverId: "server-1",
       channelId: "channel-2",
+    });
+  });
+
+  /**
+   * Проверяется, что store умеет применять live-обновление voice state
+   * для текущего пользователя и синхронно отражать его в локальном состоянии модуля.
+   * Это важно, потому что mute/deafen теперь становятся server-authoritative,
+   * а текущая панель пользователя должна опираться не на локальные toggle-флаги.
+   * Граничные случаи: событие для другого пользователя должно игнорироваться,
+   * а для текущего пользователя одновременно обновляются оба флага состояния.
+   */
+  test("should apply live voice state updates only for the current authenticated user", () => {
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+    authStore.sessionToken = "active-session-token";
+    authStore.status = "authenticated";
+    authStore.isInitialized = true;
+
+    const serverModuleStore = useServerModuleStore();
+
+    serverModuleStore.applyVoiceStateUpdated({
+      serverId: "server-1",
+      userId: "user-2",
+      channelId: "channel-1",
+      muted: true,
+      deafened: true,
+      occurredAt: "2026-03-19T10:00:00.000Z",
+    });
+
+    expect(serverModuleStore.currentVoiceState).toEqual({
+      muted: false,
+      deafened: false,
+    });
+
+    serverModuleStore.applyVoiceStateUpdated({
+      serverId: "server-1",
+      userId: "user-1",
+      channelId: "channel-1",
+      muted: true,
+      deafened: false,
+      occurredAt: "2026-03-19T10:01:00.000Z",
+    });
+
+    expect(serverModuleStore.currentVoiceState).toEqual({
+      muted: true,
+      deafened: false,
+    });
+  });
+
+  /**
+   * Проверяется, что store отправляет отдельные realtime-команды
+   * для self-mute и self-deafen по активному voice presence пользователя.
+   * Это важно, потому что именно store теперь связывает control panel
+   * с серверным live-state и media-поведением, а не меняет локальные ref-флаги.
+   * Граничные случаи: если пользователь уже находится в канале,
+   * обе команды обязаны уходить с тем же `serverId` и `channelId`.
+   */
+  test("should execute self mute and self deafen commands for the current presence", async () => {
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+    authStore.sessionToken = "active-session-token";
+    authStore.status = "authenticated";
+    authStore.isInitialized = true;
+
+    const serverModuleStore = useServerModuleStore();
+    serverModuleStore.selectedServerId = "server-1";
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-19T10:00:00.000Z",
+      },
+      previousChannelId: null,
+      action: "joined",
+      occurredAt: "2026-03-19T10:00:00.000Z",
+    });
+
+    await serverModuleStore.setSelfMuted(true);
+    await serverModuleStore.setSelfDeafened(true);
+
+    expect(realtimeMocks.setSelfMute).toHaveBeenCalledWith({
+      sessionToken: "active-session-token",
+      serverId: "server-1",
+      channelId: "channel-1",
+      muted: true,
+    });
+    expect(realtimeMocks.setSelfDeafen).toHaveBeenCalledWith({
+      sessionToken: "active-session-token",
+      serverId: "server-1",
+      channelId: "channel-1",
+      deafened: true,
+    });
+  });
+
+  /**
+   * Проверяется, что активное голосовое присутствие не привязано к открытому серверу в URL,
+   * а значит пользователь может оставаться в канале одного сервера и переключать страницу
+   * на другой сервер без локального disconnect и без потери mute/deafen state.
+   * Это важно, потому что выбранный сервер в интерфейсе и активный voice channel
+   * теперь являются разными сущностями, и store должен хранить их независимо.
+   * Граничные случаи: при переключении на другой сервер selected channel должен очиститься,
+   * а при возврате обратно должен восстановиться именно активный voice channel.
+   */
+  test("should keep the active voice presence independent from the selected server page", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            serverSnapshot: {
+              server: {
+                id: "server-1",
+                name: "Первый сервер",
+                avatarUrl: null,
+                isPublic: false,
+                role: "OWNER",
+              },
+              channels: [
+                {
+                  id: "channel-1",
+                  name: "Общий",
+                  sortOrder: 0,
+                },
+              ],
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            serverPresenceSnapshot: {
+              members: [],
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            serverSnapshot: {
+              server: {
+                id: "server-2",
+                name: "Второй сервер",
+                avatarUrl: null,
+                isPublic: false,
+                role: "MEMBER",
+              },
+              channels: [
+                {
+                  id: "channel-9",
+                  name: "Стрим",
+                  sortOrder: 0,
+                },
+              ],
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            serverPresenceSnapshot: {
+              members: [],
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            serverSnapshot: {
+              server: {
+                id: "server-1",
+                name: "Первый сервер",
+                avatarUrl: null,
+                isPublic: false,
+                role: "OWNER",
+              },
+              channels: [
+                {
+                  id: "channel-1",
+                  name: "Общий",
+                  sortOrder: 0,
+                },
+              ],
+            },
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        createGraphqlResponse({
+          data: {
+            serverPresenceSnapshot: {
+              members: [],
+            },
+          },
+        }),
+      );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+    authStore.sessionToken = "active-session-token";
+    authStore.status = "authenticated";
+    authStore.isInitialized = true;
+
+    const serverModuleStore = useServerModuleStore();
+
+    await serverModuleStore.openServer("server-1");
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-20T10:00:00.000Z",
+      },
+      previousChannelId: null,
+      action: "joined",
+      occurredAt: "2026-03-20T10:00:00.000Z",
+    });
+    serverModuleStore.applyVoiceStateUpdated({
+      serverId: "server-1",
+      userId: "user-1",
+      channelId: "channel-1",
+      muted: true,
+      deafened: false,
+      occurredAt: "2026-03-20T10:01:00.000Z",
+    });
+
+    await serverModuleStore.openServer("server-2");
+
+    expect(serverModuleStore.currentUserPresence).toEqual({
+      serverId: "server-1",
+      userId: "user-1",
+      displayName: "Добрыня",
+      avatarUrl: null,
+      channelId: "channel-1",
+      joinedAt: "2026-03-20T10:00:00.000Z",
+    });
+    expect(serverModuleStore.selectedChannelId).toBeNull();
+    expect(serverModuleStore.currentVoiceState).toEqual({
+      muted: true,
+      deafened: false,
+    });
+
+    await serverModuleStore.openServer("server-1");
+
+    expect(serverModuleStore.selectedChannelId).toBe("channel-1");
+  });
+
+  /**
+   * Проверяется, что переход в канал другого сервера не пытается выполнить
+   * недопустимую cross-server move-команду, а корректно делает leave на старом сервере
+   * и затем join на новом выбранном сервере.
+   * Это важно, потому что URL больше не управляет voice lifecycle,
+   * и store обязан сам корректно разрулить смену голосового сервера.
+   * Граничные случаи: после успешной цепочки локальное активное присутствие
+   * должно указывать уже на новый сервер и новый канал.
+   */
+  test("should leave the previous server before joining a channel on another server", async () => {
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+    authStore.sessionToken = "active-session-token";
+    authStore.status = "authenticated";
+    authStore.isInitialized = true;
+
+    const serverModuleStore = useServerModuleStore();
+    serverModuleStore.selectedServerId = "server-1";
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-1",
+        displayName: "Добрыня",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-20T10:00:00.000Z",
+      },
+      previousChannelId: null,
+      action: "joined",
+      occurredAt: "2026-03-20T10:00:00.000Z",
+    });
+
+    serverModuleStore.selectedServerId = "server-2";
+
+    await serverModuleStore.joinOrMoveToChannel("channel-9");
+
+    expect(realtimeMocks.leave).toHaveBeenCalledWith({
+      sessionToken: "active-session-token",
+      serverId: "server-1",
+      channelId: "channel-1",
+    });
+    expect(realtimeMocks.join).toHaveBeenCalledWith({
+      sessionToken: "active-session-token",
+      serverId: "server-2",
+      channelId: "channel-9",
+    });
+    expect(serverModuleStore.currentUserPresence).toEqual({
+      serverId: "server-2",
+      userId: "user-1",
+      displayName: "Добрыня",
+      avatarUrl: null,
+      channelId: "channel-9",
+      joinedAt: expect.any(String),
     });
   });
 });

@@ -1,119 +1,37 @@
 import { onMounted, onUnmounted, watch } from "vue";
-import type { ComputedRef } from "vue";
-import type { Router } from "vue-router";
-import type { useAuthStore } from "../stores/auth";
-import type { useServerModuleStore } from "../stores/serverModule";
-import type { ClientPresenceUpdatedEventPayload } from "../types/server";
-import { buildAppServerChannelRoute } from "../router/serverRoutes";
+import { resolvePresenceSoundCue } from "../realtime/presence-sound";
+import { resetRealtimeRuntime } from "../realtime/runtime";
 import { subscribeToServerLiveState } from "../realtime/server-live";
+import { resetActiveVoiceSession, syncActiveVoiceSession } from "../realtime/voice-session";
+import { useAuthStore } from "../stores/auth";
+import { useServerModuleStore } from "../stores/serverModule";
 import { useAppSounds } from "./useAppSounds";
 
-type PresenceSoundCue = "join" | "leave" | null;
-
-/**
- * Входные параметры realtime-orchestration для защищенного home-экрана.
- */
-export interface UseHomePageRealtimeInput {
-  selectedServerId: ComputedRef<string | null>;
-  selectedChannelId: ComputedRef<string | null>;
+interface UseHomePageRealtimeOptions {
+  selectedServerId: {
+    value: string | null;
+  };
   authStore: ReturnType<typeof useAuthStore>;
   serverModuleStore: ReturnType<typeof useServerModuleStore>;
-  router: Router;
 }
 
 /**
- * Подключает realtime-подписки home-экрана, route-sync и звуковые сигналы presence.
+ * Поднимает realtime-подписки home-экрана и voice lifecycle для текущей сессии.
  */
-export function useHomePageRealtime(input: UseHomePageRealtimeInput): void {
+export function useHomePageRealtime({
+  selectedServerId,
+  authStore,
+  serverModuleStore,
+}: UseHomePageRealtimeOptions): void {
   const { playJoinChannelSound, playLeaveChannelSound } = useAppSounds();
-  let stopServerLiveSubscription: null | (() => Promise<void>) = null;
-  let serverLiveSubscriptionVersion = 0;
-
-  /**
-   * Локально убирает текущего пользователя из presence-списка, если соединение
-   * уже потеряно или страница уходит на refresh/unload раньше server event roundtrip.
-   */
-  function applyLocalDisconnectCleanup(): void {
-    const currentPresence = input.serverModuleStore.currentUserPresence;
-    const serverId = input.selectedServerId.value;
-
-    if (!currentPresence || !serverId) {
-      return;
-    }
-
-    input.serverModuleStore.applyPresenceUpdated({
-      serverId,
-      member: currentPresence,
-      previousChannelId: currentPresence.channelId,
-      action: "left",
-      occurredAt: new Date().toISOString(),
-    });
-  }
+  let stopServerLiveSubscription: (() => void) | null = null;
+  let requestedServerLiveSubscriptionTarget: string | null = null;
+  let activeServerLiveSubscriptionTarget: string | null = null;
 
   watch(
-    [() => input.authStore.sessionToken, input.selectedServerId],
-    async ([sessionToken, serverId], _previousValue, onCleanup) => {
-      const subscriptionVersion = ++serverLiveSubscriptionVersion;
-      let isDisposed = false;
-
-      onCleanup(() => {
-        isDisposed = true;
-      });
-
-      if (stopServerLiveSubscription) {
-        const stop = stopServerLiveSubscription;
-        stopServerLiveSubscription = null;
-        await stop();
-      }
-
-      input.serverModuleStore.clearPresenceError();
-
-      if (!sessionToken || !serverId) {
-        return;
-      }
-
-      try {
-        const stop = await subscribeToServerLiveState({
-          sessionToken,
-          serverId,
-          onServerUpdated: (payload) => {
-            input.serverModuleStore.applyLiveServerUpdated(payload);
-          },
-          onChannelsUpdated: (payload) => {
-            input.serverModuleStore.applyLiveChannelsUpdated(payload);
-          },
-          onPresenceUpdated: (payload) => {
-            const soundCue = resolvePresenceSoundCue({
-              currentUserId: input.authStore.currentUser?.id ?? null,
-              currentChannelId: input.serverModuleStore.currentUserPresence?.channelId ?? null,
-              payload,
-            });
-
-            input.serverModuleStore.applyPresenceUpdated(payload);
-
-            if (soundCue === "join") {
-              playJoinChannelSound();
-            }
-
-            if (soundCue === "leave") {
-              playLeaveChannelSound();
-            }
-          },
-        });
-
-        if (isDisposed || subscriptionVersion !== serverLiveSubscriptionVersion) {
-          await stop();
-          return;
-        }
-
-        stopServerLiveSubscription = stop;
-      } catch (error) {
-        if (isDisposed || subscriptionVersion !== serverLiveSubscriptionVersion) {
-          return;
-        }
-
-        input.serverModuleStore.presenceErrorMessage = toRealtimeErrorMessage(error);
-      }
+    [() => authStore.sessionToken, () => selectedServerId.value],
+    ([sessionToken, serverId]) => {
+      void switchServerLiveSubscription(sessionToken, serverId);
     },
     {
       immediate: true,
@@ -122,22 +40,30 @@ export function useHomePageRealtime(input: UseHomePageRealtimeInput): void {
 
   watch(
     [
-      input.selectedServerId,
-      () => input.serverModuleStore.currentUserPresence?.channelId ?? null,
-      () => input.serverModuleStore.isChangingPresence,
+      () => authStore.sessionToken,
+      () => authStore.currentUser?.id ?? null,
+      () => serverModuleStore.currentUserPresence?.serverId ?? null,
+      () => serverModuleStore.currentUserPresence?.channelId ?? null,
+      () => serverModuleStore.currentVoiceState.muted,
+      () => serverModuleStore.currentVoiceState.deafened,
     ],
-    ([serverId, activeChannelId, isChangingPresence]) => {
-      if (!serverId || !activeChannelId || isChangingPresence) {
-        return;
-      }
-
-      const targetRoute = buildAppServerChannelRoute(serverId, activeChannelId);
-
-      if (input.router.currentRoute.value.path === targetRoute) {
-        return;
-      }
-
-      void input.router.replace(targetRoute);
+    ([sessionToken, currentUserId]) => {
+      void syncActiveVoiceSession({
+        sessionToken,
+        currentUserId,
+        serverId: serverModuleStore.currentUserPresence?.serverId ?? null,
+        presence: serverModuleStore.currentUserPresence,
+        voiceState: serverModuleStore.currentVoiceState,
+        onVoiceStateUpdated: (payload) => {
+          serverModuleStore.applyVoiceStateUpdated(payload);
+        },
+        onError: (error) => {
+          serverModuleStore.presenceErrorMessage =
+            error instanceof Error && error.message
+              ? error.message
+              : "Не удалось синхронизировать голосовую сессию.";
+        },
+      });
     },
     {
       immediate: true,
@@ -145,96 +71,128 @@ export function useHomePageRealtime(input: UseHomePageRealtimeInput): void {
   );
 
   onMounted(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    window.addEventListener("offline", applyLocalDisconnectCleanup);
-    window.addEventListener("pagehide", applyLocalDisconnectCleanup);
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("pagehide", handlePageHide);
   });
 
   onUnmounted(() => {
-    if (typeof window !== "undefined") {
-      window.removeEventListener("offline", applyLocalDisconnectCleanup);
-      window.removeEventListener("pagehide", applyLocalDisconnectCleanup);
-    }
+    window.removeEventListener("offline", handleOffline);
+    window.removeEventListener("pagehide", handlePageHide);
+    teardownServerLiveSubscription();
+    resetActiveVoiceSession();
+    resetRealtimeRuntime();
+  });
 
-    if (!stopServerLiveSubscription) {
+  /**
+   * Переключает server-level realtime подписки только для текущего открытого сервера.
+   */
+  async function switchServerLiveSubscription(
+    sessionToken: string | null,
+    serverId: string | null,
+  ): Promise<void> {
+    const nextTarget = sessionToken && serverId ? `${sessionToken}:${serverId}` : null;
+
+    if (nextTarget && nextTarget === requestedServerLiveSubscriptionTarget) {
       return;
     }
 
-    const stop = stopServerLiveSubscription;
+    if (nextTarget && nextTarget === activeServerLiveSubscriptionTarget) {
+      return;
+    }
+
+    requestedServerLiveSubscriptionTarget = nextTarget;
+    teardownServerLiveSubscription();
+
+    if (!sessionToken || !serverId) {
+      activeServerLiveSubscriptionTarget = null;
+      requestedServerLiveSubscriptionTarget = null;
+      return;
+    }
+
+    try {
+      const stopSubscription = await subscribeToServerLiveState({
+        sessionToken,
+        serverId,
+        onServerUpdated: (payload) => {
+          serverModuleStore.applyLiveServerUpdated(payload);
+        },
+        onChannelsUpdated: (payload) => {
+          serverModuleStore.applyLiveChannelsUpdated(payload);
+        },
+        onPresenceUpdated: (payload) => {
+          const soundCue = resolvePresenceSoundCue({
+            currentUserId: authStore.currentUser?.id ?? null,
+            currentUserChannelId: serverModuleStore.currentUserPresence?.channelId ?? null,
+            payload,
+          });
+
+          serverModuleStore.applyPresenceUpdated(payload);
+
+          if (soundCue === "join") {
+            void playJoinChannelSound();
+          }
+
+          if (soundCue === "leave") {
+            void playLeaveChannelSound();
+          }
+        },
+      });
+
+      if (requestedServerLiveSubscriptionTarget !== nextTarget) {
+        stopSubscription();
+        return;
+      }
+
+      stopServerLiveSubscription = stopSubscription;
+      activeServerLiveSubscriptionTarget = nextTarget;
+    } catch (error) {
+      if (requestedServerLiveSubscriptionTarget === nextTarget) {
+        requestedServerLiveSubscriptionTarget = null;
+        activeServerLiveSubscriptionTarget = null;
+      }
+
+      serverModuleStore.presenceErrorMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : "Не удалось подключить realtime сервера.";
+    }
+  }
+
+  /**
+   * Удаляет активные подписки live-состояния выбранного сервера.
+   */
+  function teardownServerLiveSubscription(): void {
+    stopServerLiveSubscription?.();
     stopServerLiveSubscription = null;
-    void stop();
-  });
-}
-
-/**
- * Определяет, какой cue sound нужно воспроизвести для входа/выхода из текущего канала.
- */
-function resolvePresenceSoundCue(input: {
-  currentUserId: string | null;
-  currentChannelId: string | null;
-  payload: ClientPresenceUpdatedEventPayload;
-}): PresenceSoundCue {
-  const { currentUserId, currentChannelId, payload } = input;
-
-  if (!currentUserId) {
-    return null;
+    activeServerLiveSubscriptionTarget = null;
   }
 
-  if (payload.member.userId === currentUserId) {
-    if (payload.action === "joined") {
-      return "join";
+  /**
+   * Локально очищает stale voice-state при разрыве сети до прихода серверного cleanup.
+   */
+  function handleOffline(): void {
+    const currentPresence = serverModuleStore.currentUserPresence;
+
+    if (!currentPresence) {
+      return;
     }
 
-    if (payload.action === "left") {
-      return "leave";
+    serverModuleStore.clearCurrentUserPresenceLocally(currentPresence.serverId);
+    resetActiveVoiceSession();
+  }
+
+  /**
+   * При refresh/закрытии вкладки полностью сбрасывает voice/runtime lifecycle.
+   */
+  function handlePageHide(): void {
+    const currentPresence = serverModuleStore.currentUserPresence;
+
+    if (currentPresence) {
+      serverModuleStore.clearCurrentUserPresenceLocally(currentPresence.serverId);
     }
 
-    return "join";
+    teardownServerLiveSubscription();
+    resetActiveVoiceSession();
+    resetRealtimeRuntime();
   }
-
-  if (!currentChannelId) {
-    return null;
-  }
-
-  if (payload.action === "joined" && payload.member.channelId === currentChannelId) {
-    return "join";
-  }
-
-  if (payload.action === "left" && payload.previousChannelId === currentChannelId) {
-    return "leave";
-  }
-
-  if (payload.action !== "moved") {
-    return null;
-  }
-
-  if (
-    payload.previousChannelId === currentChannelId &&
-    payload.member.channelId !== currentChannelId
-  ) {
-    return "leave";
-  }
-
-  if (
-    payload.member.channelId === currentChannelId &&
-    payload.previousChannelId !== currentChannelId
-  ) {
-    return "join";
-  }
-
-  return null;
-}
-
-/**
- * Приводит ошибку realtime-подписки к читаемому сообщению.
- */
-function toRealtimeErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  return "Не удалось подключить live-обновления сервера.";
 }

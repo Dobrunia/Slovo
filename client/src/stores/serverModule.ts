@@ -6,19 +6,24 @@ import {
   executeJoinVoiceChannelCommand,
   executeLeaveVoiceChannelCommand,
   executeMoveVoiceChannelCommand,
+  executeSetSelfDeafenCommand,
+  executeSetSelfMuteCommand,
 } from "../realtime/runtime";
 import { useAuthStore } from "./auth";
 import { useServersStore } from "./servers";
 import type {
+  ClientActiveVoicePresence,
   ClientChannelsUpdatedEventPayload,
   ClientDeleteServerResult,
   ClientPresenceUpdatedEventPayload,
+  ClientCurrentVoiceState,
   ClientRuntimePresenceMember,
   ClientServerInviteLink,
   ClientServerListItem,
   ClientServerSnapshot,
   ClientServerUpdatedEventPayload,
   ClientUpdateServerInput,
+  ClientVoiceStateUpdatedEventPayload,
   ClientVoiceChannel,
 } from "../types/server";
 
@@ -27,6 +32,7 @@ import type {
  */
 export const useServerModuleStore = defineStore("serverModule", () => {
   const selectedServerId = ref<string | null>(null);
+  const selectedChannelId = ref<string | null>(null);
   const loadedServerId = ref<string | null>(null);
   const snapshot = ref<ClientServerSnapshot | null>(null);
   const inviteLink = ref<ClientServerInviteLink | null>(null);
@@ -44,6 +50,11 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   const deleteServerErrorMessage = ref<string | null>(null);
   const presenceErrorMessage = ref<string | null>(null);
   const presenceMembers = ref<ClientRuntimePresenceMember[]>([]);
+  const activeVoicePresence = ref<ClientActiveVoicePresence | null>(null);
+  const currentVoiceState = ref<ClientCurrentVoiceState>({
+    muted: false,
+    deafened: false,
+  });
 
   const serverApiClient = createServerApiClient({
     graphqlUrl: import.meta.env.VITE_GRAPHQL_URL || DEFAULT_CLIENT_GRAPHQL_URL,
@@ -51,11 +62,11 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   const currentUserPresence = computed(() => {
     const currentUserId = useAuthStore().currentUser?.id;
 
-    if (!currentUserId) {
+    if (!currentUserId || activeVoicePresence.value?.userId !== currentUserId) {
       return null;
     }
 
-    return presenceMembers.value.find((member) => member.userId === currentUserId) ?? null;
+    return activeVoicePresence.value;
   });
 
   /**
@@ -103,6 +114,10 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     }
 
     selectedServerId.value = normalizedServerId;
+    selectedChannelId.value =
+      activeVoicePresence.value?.serverId === normalizedServerId
+        ? activeVoicePresence.value.channelId
+        : null;
     await loadSelectedServerSnapshot();
   }
 
@@ -122,6 +137,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
    */
   function reset(): void {
     selectedServerId.value = null;
+    selectedChannelId.value = null;
     loadedServerId.value = null;
     snapshot.value = null;
     inviteLink.value = null;
@@ -139,6 +155,11 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     deleteServerErrorMessage.value = null;
     presenceErrorMessage.value = null;
     presenceMembers.value = [];
+    activeVoicePresence.value = null;
+    currentVoiceState.value = {
+      muted: false,
+      deafened: false,
+    };
   }
 
   /**
@@ -469,6 +490,33 @@ export const useServerModuleStore = defineStore("serverModule", () => {
    * Применяет live-изменение runtime presence внутри текущего выбранного сервера.
    */
   function applyPresenceUpdated(payload: ClientPresenceUpdatedEventPayload): void {
+    const currentUserId = useAuthStore().currentUser?.id;
+
+    if (payload.member.userId === currentUserId) {
+      if (payload.action === "left") {
+        if (activeVoicePresence.value?.serverId === payload.serverId) {
+          activeVoicePresence.value = null;
+          currentVoiceState.value = {
+            muted: false,
+            deafened: false,
+          };
+
+          if (selectedServerId.value === payload.serverId) {
+            selectedChannelId.value = null;
+          }
+        }
+      } else {
+        activeVoicePresence.value = {
+          serverId: payload.serverId,
+          ...payload.member,
+        };
+
+        if (selectedServerId.value === payload.serverId) {
+          selectedChannelId.value = payload.member.channelId;
+        }
+      }
+    }
+
     if (!selectedServerId.value || payload.serverId !== selectedServerId.value) {
       return;
     }
@@ -490,34 +538,79 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   }
 
   /**
+   * Применяет live-обновление voice state текущего пользователя.
+   */
+  function applyVoiceStateUpdated(payload: ClientVoiceStateUpdatedEventPayload): void {
+    const currentUserId = useAuthStore().currentUser?.id;
+
+    if (!currentUserId || payload.userId !== currentUserId) {
+      return;
+    }
+
+    currentVoiceState.value = {
+      muted: payload.muted,
+      deafened: payload.deafened,
+    };
+  }
+
+  /**
    * Выполняет join или move команду для выбранного голосового канала.
    */
   async function joinOrMoveToChannel(channelId: string): Promise<void> {
-    const serverId = requireSelectedServerId();
+    const targetServerId = requireSelectedServerId();
     const sessionToken = requireSessionToken();
+    const currentPresence = currentUserPresence.value;
 
     isChangingPresence.value = true;
     presenceErrorMessage.value = null;
 
     try {
-      if (!currentUserPresence.value) {
+      if (!currentPresence) {
         await executeJoinVoiceChannelCommand({
           sessionToken,
-          serverId,
+          serverId: targetServerId,
+          channelId,
+        });
+        applyLocalCurrentUserPresence({
+          serverId: targetServerId,
           channelId,
         });
         return;
       }
 
-      if (currentUserPresence.value.channelId === channelId) {
+      if (currentPresence.serverId !== targetServerId) {
+        await executeLeaveVoiceChannelCommand({
+          sessionToken,
+          serverId: currentPresence.serverId,
+          channelId: currentPresence.channelId,
+        });
+        clearCurrentUserPresenceLocally(currentPresence.serverId);
+
+        await executeJoinVoiceChannelCommand({
+          sessionToken,
+          serverId: targetServerId,
+          channelId,
+        });
+        applyLocalCurrentUserPresence({
+          serverId: targetServerId,
+          channelId,
+        });
+        return;
+      }
+
+      if (currentPresence.channelId === channelId) {
         return;
       }
 
       await executeMoveVoiceChannelCommand({
         sessionToken,
-        serverId,
-        channelId: currentUserPresence.value.channelId,
+        serverId: currentPresence.serverId,
+        channelId: currentPresence.channelId,
         targetChannelId: channelId,
+      });
+      applyLocalCurrentUserPresence({
+        serverId: currentPresence.serverId,
+        channelId,
       });
     } catch (error) {
       presenceErrorMessage.value = toPresenceErrorMessage(error);
@@ -537,7 +630,6 @@ export const useServerModuleStore = defineStore("serverModule", () => {
       return;
     }
 
-    const serverId = requireSelectedServerId();
     const sessionToken = requireSessionToken();
 
     isChangingPresence.value = true;
@@ -546,14 +638,69 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     try {
       await executeLeaveVoiceChannelCommand({
         sessionToken,
-        serverId,
+        serverId: currentPresence.serverId,
         channelId: currentPresence.channelId,
       });
+      clearCurrentUserPresenceLocally(currentPresence.serverId);
     } catch (error) {
       presenceErrorMessage.value = toPresenceErrorMessage(error);
       throw error;
     } finally {
       isChangingPresence.value = false;
+    }
+  }
+
+  /**
+   * Выполняет self-mute команду для текущего голосового канала пользователя.
+   */
+  async function setSelfMuted(muted: boolean): Promise<void> {
+    const currentPresence = currentUserPresence.value;
+
+    if (!currentPresence) {
+      return;
+    }
+
+    const sessionToken = requireSessionToken();
+
+    presenceErrorMessage.value = null;
+
+    try {
+      await executeSetSelfMuteCommand({
+        sessionToken,
+        serverId: currentPresence.serverId,
+        channelId: currentPresence.channelId,
+        muted,
+      });
+    } catch (error) {
+      presenceErrorMessage.value = toPresenceErrorMessage(error);
+      throw error;
+    }
+  }
+
+  /**
+   * Выполняет self-deafen команду для текущего голосового канала пользователя.
+   */
+  async function setSelfDeafened(deafened: boolean): Promise<void> {
+    const currentPresence = currentUserPresence.value;
+
+    if (!currentPresence) {
+      return;
+    }
+
+    const sessionToken = requireSessionToken();
+
+    presenceErrorMessage.value = null;
+
+    try {
+      await executeSetSelfDeafenCommand({
+        sessionToken,
+        serverId: currentPresence.serverId,
+        channelId: currentPresence.channelId,
+        deafened,
+      });
+    } catch (error) {
+      presenceErrorMessage.value = toPresenceErrorMessage(error);
+      throw error;
     }
   }
 
@@ -566,6 +713,80 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     }
 
     return selectedServerId.value;
+  }
+
+  /**
+   * Обновляет выбранный канал только для текущего открытого сервера.
+   */
+  function selectChannel(channelId: string | null): void {
+    selectedChannelId.value = channelId;
+  }
+
+  /**
+   * Локально применяет изменение присутствия текущего пользователя после успешной voice-команды.
+   */
+  function applyLocalCurrentUserPresence(input: {
+    serverId: string;
+    channelId: string;
+  }): void {
+    const authStore = useAuthStore();
+    const currentUser = authStore.currentUser;
+
+    if (!currentUser) {
+      return;
+    }
+
+    const nextPresence: ClientActiveVoicePresence = {
+      serverId: input.serverId,
+      userId: currentUser.id,
+      displayName: currentUser.displayName,
+      avatarUrl: currentUser.avatarUrl ?? null,
+      channelId: input.channelId,
+      joinedAt: new Date().toISOString(),
+    };
+
+    activeVoicePresence.value = nextPresence;
+
+    if (selectedServerId.value === input.serverId) {
+      selectedChannelId.value = input.channelId;
+
+      const nextMembers = presenceMembers.value.filter(
+        (member) => member.userId !== nextPresence.userId,
+      );
+
+      nextMembers.push({
+        userId: nextPresence.userId,
+        displayName: nextPresence.displayName,
+        avatarUrl: nextPresence.avatarUrl,
+        channelId: nextPresence.channelId,
+        joinedAt: nextPresence.joinedAt,
+      });
+      nextMembers.sort((left, right) => left.joinedAt.localeCompare(right.joinedAt));
+      presenceMembers.value = nextMembers;
+    }
+  }
+
+  /**
+   * Локально очищает присутствие текущего пользователя после успешного leave/disconnect.
+   */
+  function clearCurrentUserPresenceLocally(serverId: string): void {
+    const currentUserId = useAuthStore().currentUser?.id;
+
+    activeVoicePresence.value = null;
+    currentVoiceState.value = {
+      muted: false,
+      deafened: false,
+    };
+
+    if (selectedServerId.value === serverId) {
+      selectedChannelId.value = null;
+    }
+
+    if (currentUserId) {
+      presenceMembers.value = presenceMembers.value.filter(
+        (member) => member.userId !== currentUserId,
+      );
+    }
   }
 
   /**
@@ -583,6 +804,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
 
   return {
     selectedServerId,
+    selectedChannelId,
     loadedServerId,
     snapshot,
     inviteLink,
@@ -600,6 +822,8 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     deleteServerErrorMessage,
     presenceErrorMessage,
     presenceMembers,
+    activeVoicePresence,
+    currentVoiceState,
     currentUserPresence,
     syncAvailableServers,
     openServer,
@@ -615,8 +839,13 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     applyLiveServerUpdated,
     applyLiveChannelsUpdated,
     applyPresenceUpdated,
+    applyVoiceStateUpdated,
     joinOrMoveToChannel,
     leaveCurrentChannel,
+    setSelfMuted,
+    setSelfDeafened,
+    selectChannel,
+    clearCurrentUserPresenceLocally,
     clearChannelsError,
     clearServerUpdateError,
     clearInviteLinkError,

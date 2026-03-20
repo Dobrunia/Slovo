@@ -67,7 +67,7 @@ export function createRealtimeChannelJoinAuthorizers(dataLayer: DataLayer) {
       key,
       context,
     }: {
-      key: { serverId: string };
+      key: { serverId: string; channelId: string };
       context: RealtimeChannelContext;
     }) =>
       canJoinServerChannel({
@@ -79,7 +79,7 @@ export function createRealtimeChannelJoinAuthorizers(dataLayer: DataLayer) {
       key,
       context,
     }: {
-      key: { serverId: string };
+      key: { serverId: string; channelId: string };
       context: RealtimeChannelContext;
     }) =>
       canJoinServerChannel({

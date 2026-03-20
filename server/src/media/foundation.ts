@@ -18,7 +18,42 @@ export interface MediaWebRtcTransportLike {
   dtlsParameters: unknown;
   sctpParameters?: unknown;
   connect(options: { dtlsParameters: unknown }): Promise<void>;
+  produce?(options: {
+    kind: string;
+    rtpParameters: unknown;
+    appData?: Record<string, unknown>;
+  }): Promise<MediaProducerLike>;
+  consume?(options: {
+    producerId: string;
+    rtpCapabilities: unknown;
+    paused?: boolean;
+  }): Promise<MediaConsumerLike>;
   setMaxIncomingBitrate?(bitrate: number): Promise<void>;
+  close(): void;
+}
+
+/**
+ * Минимальная форма producer-а MediaSoup, необходимая серверу проекта.
+ */
+export interface MediaProducerLike {
+  id: string;
+  kind: string;
+  pause?(): Promise<void> | void;
+  resume?(): Promise<void> | void;
+  close(): void;
+}
+
+/**
+ * Минимальная форма consumer-а MediaSoup, необходимая серверу проекта.
+ */
+export interface MediaConsumerLike {
+  id: string;
+  producerId: string;
+  kind: string;
+  rtpParameters: unknown;
+  type?: string;
+  pause?(): Promise<void> | void;
+  resume?(): Promise<void> | void;
   close(): void;
 }
 
@@ -28,6 +63,10 @@ export interface MediaWebRtcTransportLike {
 export interface MediaRouterLike {
   rtpCapabilities: unknown;
   createWebRtcTransport(options: Record<string, unknown>): Promise<MediaWebRtcTransportLike>;
+  canConsume?(options: {
+    producerId: string;
+    rtpCapabilities: unknown;
+  }): boolean;
   close(): void;
 }
 
@@ -74,6 +113,24 @@ export interface MediaFoundation {
   getRouterRtpCapabilities(): unknown;
   createWebRtcTransport(): Promise<CreatedMediaWebRtcTransport>;
   connectWebRtcTransport(transport: MediaWebRtcTransportLike, dtlsParameters: unknown): Promise<void>;
+  createProducer(input: {
+    transport: MediaWebRtcTransportLike;
+    kind: string;
+    rtpParameters: unknown;
+    appData?: Record<string, unknown>;
+  }): Promise<MediaProducerLike>;
+  createConsumer(input: {
+    transport: MediaWebRtcTransportLike;
+    producerId: string;
+    rtpCapabilities: unknown;
+    paused?: boolean;
+  }): Promise<MediaConsumerLike>;
+  canConsume(input: {
+    producerId: string;
+    rtpCapabilities: unknown;
+  }): boolean;
+  setProducerPaused(producer: MediaProducerLike, paused: boolean): Promise<void>;
+  setConsumerPaused(consumer: MediaConsumerLike, paused: boolean): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -162,6 +219,54 @@ export async function createMediaFoundation(
       await transport.connect({
         dtlsParameters,
       });
+    },
+    async createProducer({ transport, kind, rtpParameters, appData }) {
+      if (!transport.produce) {
+        throw new Error("Media transport does not support producing media.");
+      }
+
+      return transport.produce({
+        kind,
+        rtpParameters,
+        appData,
+      });
+    },
+    async createConsumer({ transport, producerId, rtpCapabilities, paused }) {
+      if (!transport.consume) {
+        throw new Error("Media transport does not support consuming media.");
+      }
+
+      return transport.consume({
+        producerId,
+        rtpCapabilities,
+        paused,
+      });
+    },
+    canConsume({ producerId, rtpCapabilities }) {
+      if (!router.canConsume) {
+        return true;
+      }
+
+      return router.canConsume({
+        producerId,
+        rtpCapabilities,
+      });
+    },
+    async setProducerPaused(producer, paused) {
+      if (paused) {
+        await Promise.resolve(producer.pause?.());
+        return;
+      }
+
+      await Promise.resolve(producer.resume?.());
+    },
+    async setConsumerPaused(consumer, paused) {
+      if (paused) {
+        await Promise.resolve(consumer.pause?.());
+        return;
+      }
+
+      await Promise.resolve(consumer.resume?.());
     },
     async close() {
       router.close();

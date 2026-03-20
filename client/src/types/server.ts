@@ -172,6 +172,13 @@ export interface ClientRuntimePresenceMember {
 }
 
 /**
+ * Глобальное клиентское присутствие текущего пользователя в голосовом канале.
+ */
+export interface ClientActiveVoicePresence extends ClientRuntimePresenceMember {
+  serverId: string;
+}
+
+/**
  * Live-payload изменения presence внутри сервера.
  */
 export interface ClientPresenceUpdatedEventPayload {
@@ -187,4 +194,37 @@ export interface ClientPresenceUpdatedEventPayload {
  */
 export interface ClientServerPresenceSnapshot {
   members: ClientRuntimePresenceMember[];
+}
+
+/**
+ * Live-payload signaling-события voice session.
+ */
+export interface ClientVoiceSessionSignaledEventPayload {
+  serverId: string;
+  channelId: string;
+  sourceUserId: string;
+  targetUserId: string | null;
+  signalType: string;
+  payloadJson: string;
+  occurredAt: string;
+}
+
+/**
+ * Live-payload изменения voice state внутри канала.
+ */
+export interface ClientVoiceStateUpdatedEventPayload {
+  serverId: string;
+  userId: string;
+  channelId: string;
+  muted: boolean;
+  deafened: boolean;
+  occurredAt: string;
+}
+
+/**
+ * Локальное voice state текущего пользователя.
+ */
+export interface ClientCurrentVoiceState {
+  muted: boolean;
+  deafened: boolean;
 }
