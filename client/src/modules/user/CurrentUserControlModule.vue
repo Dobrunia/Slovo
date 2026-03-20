@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
-import { DbrAvatar } from "dobruniaui-vue";
-import AppIconButton from "../../components/base/AppIconButton.vue";
-import { buildAppServerRoute } from "../../router/serverRoutes";
-import { useAuthStore } from "../../stores/auth";
-import { useServerModuleStore } from "../../stores/serverModule";
-import headphonesIcon from "../../assets/icons/headphones.svg";
-import headphonesOffIcon from "../../assets/icons/headphones-off.svg";
-import micIcon from "../../assets/icons/mic.svg";
-import micOffIcon from "../../assets/icons/mic-off.svg";
-import phoneDownIcon from "../../assets/icons/phone-down.svg";
-import screenShareIcon from "../../assets/icons/screen-share.svg";
-import screenShareOffIcon from "../../assets/icons/screen-share-off.svg";
+import { computed, ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { DbrAvatar } from 'dobruniaui-vue';
+import AppIconButton from '../../components/base/AppIconButton.vue';
+import { buildAppServerRoute } from '../../router/serverRoutes';
+import { useAuthStore } from '../../stores/auth';
+import { useServerModuleStore } from '../../stores/serverModule';
+import headphonesIcon from '../../assets/icons/headphones.svg';
+import headphonesOffIcon from '../../assets/icons/headphones-off.svg';
+import micIcon from '../../assets/icons/mic.svg';
+import micOffIcon from '../../assets/icons/mic-off.svg';
+import phoneDownIcon from '../../assets/icons/phone-down.svg';
+import screenShareIcon from '../../assets/icons/screen-share.svg';
+import screenShareOffIcon from '../../assets/icons/screen-share-off.svg';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -23,16 +23,14 @@ const isScreenShareSubmitting = ref(false);
 /**
  * Отображаемое имя текущего пользователя.
  */
-const displayName = computed(
-  () => authStore.currentUser?.displayName ?? "Пользователь",
-);
+const displayName = computed(() => authStore.currentUser?.displayName ?? 'Пользователь');
 
 /**
  * Username текущего пользователя в формате handle.
  */
 const handle = computed(() => {
   const username = authStore.currentUser?.username;
-  return username ? `@${username}` : "@slovo-user";
+  return username ? `@${username}` : '@slovo-user';
 });
 
 /**
@@ -40,8 +38,7 @@ const handle = computed(() => {
  */
 const hasActiveChannelPresence = computed(() => Boolean(serverModuleStore.currentUserPresence));
 const isMicrophoneMuted = computed(
-  () =>
-    serverModuleStore.currentVoiceState.muted || serverModuleStore.currentVoiceState.deafened,
+  () => serverModuleStore.currentVoiceState.muted || serverModuleStore.currentVoiceState.deafened
 );
 const isHeadphonesMuted = computed(() => serverModuleStore.currentVoiceState.deafened);
 const isScreenShareActive = computed(() => Boolean(serverModuleStore.currentUserScreenShareState));
@@ -123,10 +120,7 @@ async function handleToggleScreenShare(): Promise<void> {
 <template>
   <section class="current-user-control-module">
     <div class="current-user-control-module__identity">
-      <DbrAvatar
-        :name="displayName"
-        :src="authStore.currentUser?.avatarUrl ?? undefined"
-      />
+      <DbrAvatar :name="displayName" :src="authStore.currentUser?.avatarUrl ?? undefined" />
 
       <div class="current-user-control-module__text">
         <p class="current-user-control-module__name dbru-text-base dbru-text-main">
@@ -140,19 +134,21 @@ async function handleToggleScreenShare(): Promise<void> {
       <div class="current-user-control-module__session-actions">
         <AppIconButton
           v-if="hasActiveChannelPresence"
+          :icon-src="isScreenShareActive ? screenShareOffIcon : screenShareIcon"
+          :label="
+            isScreenShareActive ? 'Остановить демонстрацию экрана' : 'Начать демонстрацию экрана'
+          "
+          icon-alt=""
+          :tone="isScreenShareActive ? 'danger' : 'default'"
+          @click="handleToggleScreenShare"
+        />
+        <AppIconButton
+          v-if="hasActiveChannelPresence"
           :icon-src="phoneDownIcon"
           label="Покинуть канал"
           icon-alt=""
           tone="danger"
           @click="handleLeaveChannel"
-        />
-        <AppIconButton
-          v-if="hasActiveChannelPresence"
-          :icon-src="isScreenShareActive ? screenShareOffIcon : screenShareIcon"
-          :label="isScreenShareActive ? 'Остановить демонстрацию экрана' : 'Начать демонстрацию экрана'"
-          icon-alt=""
-          :tone="isScreenShareActive ? 'danger' : 'default'"
-          @click="handleToggleScreenShare"
         />
       </div>
     </div>

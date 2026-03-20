@@ -89,7 +89,7 @@ function handleSelect(): void {
 }
 
 .server-channel-presence-list-item__button:hover {
-  background: var(--dbru-color-surface);
+  background-color: var(--icon-button-hover);
 }
 
 .server-channel-presence-list-item__button:focus-visible {
