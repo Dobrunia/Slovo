@@ -1,105 +1,118 @@
 <script setup lang="ts">
-import type { ClientRealtimeConnectionQuality } from "../../types/server";
-import wifiGoodIcon from "../../assets/icons/wifi-good.svg";
-import wifiMedIcon from "../../assets/icons/wifi-med.svg";
+import { computed } from "vue";
 import wifiLowIcon from "../../assets/icons/wifi-low.svg";
+import wifiMedIcon from "../../assets/icons/wifi-med.svg";
+import wifiGoodIcon from "../../assets/icons/wifi-good.svg";
+
+type ConnectionQualityLevel = "low" | "med" | "good" | null | undefined;
 
 interface ConnectionQualityIndicatorProps {
-  quality: ClientRealtimeConnectionQuality | null;
+  quality: ConnectionQualityLevel;
+  size?: "xs" | "sm" | "md";
 }
 
-const props = defineProps<ConnectionQualityIndicatorProps>();
+const props = withDefaults(defineProps<ConnectionQualityIndicatorProps>(), {
+  size: "sm",
+});
 
 /**
- * Возвращает SVG и подпись для текущей градации качества соединения.
+ * Возвращает метаданные иконки и цвета для текущего качества соединения.
  */
-function resolveConnectionQualityMeta(quality: ClientRealtimeConnectionQuality | null): {
-  iconSrc: string | null;
-  label: string;
-  toneClass: string | null;
-} {
-  if (quality === "good") {
+const indicatorMeta = computed(() => {
+  if (!props.quality) {
+    return null;
+  }
+
+  if (props.quality === "good") {
     return {
       iconSrc: wifiGoodIcon,
       label: "Хорошее соединение",
-      toneClass: "connection-quality-indicator--good",
-    };
+      tone: "success",
+    } as const;
   }
 
-  if (quality === "med") {
+  if (props.quality === "med") {
     return {
       iconSrc: wifiMedIcon,
       label: "Среднее соединение",
-      toneClass: "connection-quality-indicator--med",
-    };
-  }
-
-  if (quality === "low") {
-    return {
-      iconSrc: wifiLowIcon,
-      label: "Слабое соединение",
-      toneClass: "connection-quality-indicator--low",
-    };
+      tone: "warning",
+    } as const;
   }
 
   return {
-    iconSrc: null,
-    label: "Качество соединения еще не определено",
-    toneClass: null,
+    iconSrc: wifiLowIcon,
+    label: "Плохое соединение",
+    tone: "error",
+  } as const;
+});
+
+/**
+ * Возвращает CSS-переменную с источником SVG-иконки.
+ */
+const iconStyle = computed(() => {
+  if (!indicatorMeta.value) {
+    return undefined;
+  }
+
+  return {
+    "--connection-quality-indicator-icon-src": `url("${indicatorMeta.value.iconSrc}")`,
   };
-}
+});
 </script>
 
 <template>
   <span
-    v-if="props.quality"
+    v-if="indicatorMeta"
     class="connection-quality-indicator"
-    :class="resolveConnectionQualityMeta(props.quality).toneClass ?? undefined"
-    :aria-label="resolveConnectionQualityMeta(props.quality).label"
-    :title="resolveConnectionQualityMeta(props.quality).label"
-  >
-    <span
-      class="connection-quality-indicator__icon"
-      :style="{
-        '--connection-quality-indicator-icon': `url(${resolveConnectionQualityMeta(props.quality).iconSrc})`,
-      }"
-    />
-  </span>
+    :class="[
+      `connection-quality-indicator--${indicatorMeta.tone}`,
+      `connection-quality-indicator--${size}`,
+    ]"
+    :title="indicatorMeta.label"
+    :aria-label="indicatorMeta.label"
+    :style="iconStyle"
+  />
 </template>
 
 <style scoped>
 .connection-quality-indicator {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-}
-
-.connection-quality-indicator__icon {
-  display: block;
-  width: 16px;
-  height: 16px;
+  display: inline-block;
+  flex: 0 0 auto;
   background-color: currentColor;
-  mask-image: var(--connection-quality-indicator-icon);
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: contain;
-  -webkit-mask-image: var(--connection-quality-indicator-icon);
-  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-image: var(--connection-quality-indicator-icon-src);
+  mask-image: var(--connection-quality-indicator-icon-src);
   -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
   -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
-.connection-quality-indicator--good {
+.connection-quality-indicator--xs {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.connection-quality-indicator--sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+.connection-quality-indicator--md {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.connection-quality-indicator--success {
   color: var(--dbru-color-success);
 }
 
-.connection-quality-indicator--med {
-  color: var(--dbru-color-warning, #d4a017);
+.connection-quality-indicator--warning {
+  color: var(--dbru-color-warning);
 }
 
-.connection-quality-indicator--low {
+.connection-quality-indicator--error {
   color: var(--dbru-color-error);
 }
 </style>

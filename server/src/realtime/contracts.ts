@@ -58,8 +58,9 @@ const runtimePresenceMemberSchema = z.object({
   joinedAt: occurredAtSchema,
 });
 
-const okAckSchema = z.object({
-  ok: z.literal(true),
+const commandAckSchema = z.object({
+  accepted: z.literal(true),
+  acknowledgedAt: occurredAtSchema,
 });
 
 export const realtimeChannels = [
@@ -98,14 +99,14 @@ export const realtimeCommands = [
       serverId: serverIdSchema,
       channelId: channelIdSchema,
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.leaveVoiceChannel, {
     input: z.object({
       serverId: serverIdSchema,
       channelId: channelIdSchema,
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.moveVoiceChannel, {
     input: z.object({
@@ -113,7 +114,7 @@ export const realtimeCommands = [
       channelId: channelIdSchema,
       targetChannelId: channelIdSchema,
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.setSelfMute, {
     input: z.object({
@@ -121,7 +122,7 @@ export const realtimeCommands = [
       channelId: channelIdSchema,
       muted: z.boolean(),
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.setSelfDeafen, {
     input: z.object({
@@ -129,7 +130,7 @@ export const realtimeCommands = [
       channelId: channelIdSchema,
       deafened: z.boolean(),
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.setScreenShareActive, {
     input: z.object({
@@ -137,7 +138,7 @@ export const realtimeCommands = [
       channelId: channelIdSchema,
       active: z.boolean(),
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.signalVoiceSession, {
     input: z.object({
@@ -147,7 +148,7 @@ export const realtimeCommands = [
       signalType: signalTypeSchema,
       payloadJson: payloadJsonSchema,
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
 ] as const;
 

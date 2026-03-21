@@ -1,49 +1,74 @@
 <script setup lang="ts">
+import { computed } from "vue";
+import micOffIcon from "../../assets/icons/mic-off.svg";
+import headphonesOffIcon from "../../assets/icons/headphones-off.svg";
+
 interface VoiceStateIndicatorsProps {
   muted: boolean;
   deafened: boolean;
-  size?: "xs" | "sm";
+  size?: "xs" | "sm" | "md";
 }
 
 const props = withDefaults(defineProps<VoiceStateIndicatorsProps>(), {
   size: "sm",
 });
+
+/**
+ * Возвращает набор активных индикаторов голосового состояния.
+ */
+const indicators = computed(() => {
+  if (props.deafened) {
+    return [
+      {
+        key: "muted",
+        label: "Микрофон выключен",
+        iconSrc: micOffIcon,
+      },
+      {
+        key: "deafened",
+        label: "Звук отключен",
+        iconSrc: headphonesOffIcon,
+      },
+    ] as const;
+  }
+
+  if (props.muted) {
+    return [
+      {
+        key: "muted",
+        label: "Микрофон выключен",
+        iconSrc: micOffIcon,
+      },
+    ] as const;
+  }
+
+  return [];
+});
+
+/**
+ * Формирует CSS-переменную для конкретной SVG-иконки.
+ */
+function buildIconStyle(iconSrc: string): Record<string, string> {
+  return {
+    "--voice-state-indicators-icon-src": `url("${iconSrc}")`,
+  };
+}
 </script>
 
 <template>
   <span
-    v-if="props.muted || props.deafened"
+    v-if="indicators.length > 0"
     class="voice-state-indicators"
-    :class="`voice-state-indicators--${props.size}`"
-    aria-label="Состояние микрофона и наушников"
   >
     <span
-      v-if="props.muted || props.deafened"
+      v-for="indicator in indicators"
+      :key="indicator.key"
       class="voice-state-indicators__icon"
-      aria-hidden="true"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V6a3 3 0 0 1 3-3Z" />
-        <path d="M19 11a7 7 0 0 1-12.02 4.95" />
-        <path d="M5 11a7 7 0 0 0 11.66 5.03" />
-        <path d="M12 18v3" />
-        <path d="M8 21h8" />
-        <path d="M4 4l16 16" />
-      </svg>
-    </span>
-
-    <span
-      v-if="props.deafened"
-      class="voice-state-indicators__icon"
-      aria-hidden="true"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M3 14v-4a2 2 0 0 1 2-2h3l4-4v16l-4-4H5a2 2 0 0 1-2-2Z" />
-        <path d="M14 9a5 5 0 0 1 0 6" />
-        <path d="M17 6a9 9 0 0 1 0 12" />
-        <path d="M4 4l16 16" />
-      </svg>
-    </span>
+      :class="`voice-state-indicators__icon--${size}`"
+      :style="buildIconStyle(indicator.iconSrc)"
+      :title="indicator.label"
+      :aria-label="indicator.label"
+    />
   </span>
 </template>
 
@@ -56,23 +81,31 @@ const props = withDefaults(defineProps<VoiceStateIndicatorsProps>(), {
 }
 
 .voice-state-indicators__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: inline-block;
   flex: 0 0 auto;
+  background-color: currentColor;
+  -webkit-mask-image: var(--voice-state-indicators-icon-src);
+  mask-image: var(--voice-state-indicators-icon-src);
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
-.voice-state-indicators__icon svg {
-  display: block;
+.voice-state-indicators__icon--xs {
+  width: 0.75rem;
+  height: 0.75rem;
 }
 
-.voice-state-indicators--xs .voice-state-indicators__icon {
-  width: 14px;
-  height: 14px;
+.voice-state-indicators__icon--sm {
+  width: 0.875rem;
+  height: 0.875rem;
 }
 
-.voice-state-indicators--sm .voice-state-indicators__icon {
-  width: 16px;
-  height: 16px;
+.voice-state-indicators__icon--md {
+  width: 1rem;
+  height: 1rem;
 }
 </style>

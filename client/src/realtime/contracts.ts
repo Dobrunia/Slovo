@@ -50,8 +50,9 @@ const runtimePresenceMemberSchema = z.object({
   joinedAt: occurredAtSchema,
 });
 
-const okAckSchema = z.object({
-  ok: z.literal(true),
+const commandAckSchema = z.object({
+  accepted: z.literal(true),
+  acknowledgedAt: occurredAtSchema,
 });
 
 export const realtimeChannels: ReturnType<typeof channel>[] = [
@@ -90,14 +91,14 @@ export const realtimeCommands: ReturnType<typeof command>[] = [
       serverId: serverIdSchema,
       channelId: channelIdSchema,
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.leaveVoiceChannel, {
     input: z.object({
       serverId: serverIdSchema,
       channelId: channelIdSchema,
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.moveVoiceChannel, {
     input: z.object({
@@ -105,7 +106,7 @@ export const realtimeCommands: ReturnType<typeof command>[] = [
       channelId: channelIdSchema,
       targetChannelId: channelIdSchema,
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.setSelfMute, {
     input: z.object({
@@ -113,7 +114,7 @@ export const realtimeCommands: ReturnType<typeof command>[] = [
       channelId: channelIdSchema,
       muted: z.boolean(),
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.setSelfDeafen, {
     input: z.object({
@@ -121,7 +122,7 @@ export const realtimeCommands: ReturnType<typeof command>[] = [
       channelId: channelIdSchema,
       deafened: z.boolean(),
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.setScreenShareActive, {
     input: z.object({
@@ -129,7 +130,7 @@ export const realtimeCommands: ReturnType<typeof command>[] = [
       channelId: channelIdSchema,
       active: z.boolean(),
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
   command(realtimeNames.commands.signalVoiceSession, {
     input: z.object({
@@ -139,7 +140,7 @@ export const realtimeCommands: ReturnType<typeof command>[] = [
       signalType: signalTypeSchema,
       payloadJson: payloadJsonSchema,
     }),
-    ack: okAckSchema,
+    ack: commandAckSchema,
   }),
 ];
 

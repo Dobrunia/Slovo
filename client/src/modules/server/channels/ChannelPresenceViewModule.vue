@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { DbrCard } from "dobruniaui-vue";
 import ChannelMemberCard from "./ChannelMemberCard.vue";
 import { useAuthStore } from "../../../stores/auth";
 import { useServerModuleStore } from "../../../stores/serverModule";
@@ -84,21 +85,6 @@ function getParticipantScreenShareStream(userId: string): MediaStream | null {
 <template>
   <section class="channel-presence-view-module">
     <template v-if="selectedChannel">
-      <header class="channel-presence-view-module__header">
-        <div class="channel-presence-view-module__heading">
-          <p class="channel-presence-view-module__eyebrow dbru-text-xs dbru-text-muted">
-            Выбранный канал
-          </p>
-          <h2 class="channel-presence-view-module__title dbru-text-lg dbru-text-main">
-            {{ selectedChannel.name }}
-          </h2>
-        </div>
-
-        <p class="channel-presence-view-module__meta dbru-text-sm dbru-text-muted">
-          Участников: {{ selectedChannelParticipants.length }}
-        </p>
-      </header>
-
       <div
         v-if="selectedChannelParticipants.length > 0"
         class="channel-presence-view-module__grid"
@@ -121,14 +107,14 @@ function getParticipantScreenShareStream(userId: string): MediaStream | null {
         v-else
         class="channel-presence-view-module__empty"
       >
-        <div class="channel-presence-view-module__empty-card">
+        <DbrCard class="channel-presence-view-module__empty-card">
           <h3 class="channel-presence-view-module__empty-title dbru-text-base dbru-text-main">
             В канале пока никого нет
           </h3>
           <p class="channel-presence-view-module__empty-copy dbru-text-sm dbru-text-muted">
             Как только участники подключатся, их карточки появятся здесь.
           </p>
-        </div>
+        </DbrCard>
       </div>
     </template>
 
@@ -136,49 +122,31 @@ function getParticipantScreenShareStream(userId: string): MediaStream | null {
       v-else
       class="channel-presence-view-module__placeholder"
     >
-      <div class="channel-presence-view-module__placeholder-card">
-        <p class="channel-presence-view-module__placeholder-eyebrow dbru-text-xs dbru-text-muted">
-          Голосовой канал
-        </p>
+      <DbrCard class="channel-presence-view-module__placeholder-card">
         <h2 class="channel-presence-view-module__placeholder-title dbru-text-lg dbru-text-main">
           Канал не выбран
         </h2>
         <p class="channel-presence-view-module__placeholder-copy dbru-text-sm dbru-text-muted">
           Выберите канал слева, чтобы посмотреть участников и их текущее состояние.
         </p>
-      </div>
+      </DbrCard>
     </div>
   </section>
 </template>
 
 <style scoped>
 .channel-presence-view-module {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
   height: 100%;
   min-height: 0;
   background: linear-gradient(180deg, var(--dbru-color-bg), var(--dbru-color-surface));
 }
 
-.channel-presence-view-module__header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--dbru-space-4);
-  padding: var(--dbru-space-6);
-}
-
-.channel-presence-view-module__heading {
-  display: grid;
-  gap: var(--dbru-space-1);
-}
-
 .channel-presence-view-module__eyebrow,
-.channel-presence-view-module__title,
-.channel-presence-view-module__meta,
 .channel-presence-view-module__empty-title,
 .channel-presence-view-module__empty-copy,
-.channel-presence-view-module__placeholder-eyebrow,
 .channel-presence-view-module__placeholder-title,
 .channel-presence-view-module__placeholder-copy {
   margin: 0;
@@ -189,8 +157,9 @@ function getParticipantScreenShareStream(userId: string): MediaStream | null {
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   align-content: start;
   gap: var(--dbru-space-4);
+  flex: 1 1 auto;
   min-height: 0;
-  padding: 0 var(--dbru-space-6) var(--dbru-space-6);
+  padding: var(--dbru-space-6);
   overflow: auto;
 }
 
@@ -209,9 +178,6 @@ function getParticipantScreenShareStream(userId: string): MediaStream | null {
   gap: var(--dbru-space-2);
   max-width: 420px;
   padding: var(--dbru-space-6);
-  border: var(--dbru-border-size-1) solid var(--dbru-color-border);
-  border-radius: var(--dbru-radius-xl);
-  background: linear-gradient(160deg, var(--dbru-color-surface), var(--dbru-color-bg));
   text-align: center;
 }
 </style>

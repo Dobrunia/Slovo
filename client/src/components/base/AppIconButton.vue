@@ -10,6 +10,7 @@ interface AppIconButtonProps {
   iconAlt?: string;
   tone?: "default" | "danger" | "success";
   spinning?: boolean;
+  disabled?: boolean;
 }
 
 const props = withDefaults(defineProps<AppIconButtonProps>(), {
@@ -17,6 +18,7 @@ const props = withDefaults(defineProps<AppIconButtonProps>(), {
   iconAlt: "",
   tone: "default",
   spinning: false,
+  disabled: false,
 });
 
 const slots = useSlots();
@@ -50,6 +52,7 @@ const hasContent = computed(() => Boolean(slots.default));
       'app-icon-button--with-content': hasContent,
     }"
     :aria-label="label"
+    :disabled="disabled"
   >
     <slot name="icon">
       <span
@@ -91,7 +94,7 @@ const hasContent = computed(() => Boolean(slots.default));
     color 160ms ease;
 }
 
-.app-icon-button:hover {
+.app-icon-button:hover:not(:disabled) {
   background-color: var(--icon-button-hover);
 }
 
@@ -100,8 +103,13 @@ const hasContent = computed(() => Boolean(slots.default));
   outline-offset: 2px;
 }
 
-.app-icon-button:active {
+.app-icon-button:active:not(:disabled) {
   transform: scale(0.96);
+}
+
+.app-icon-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .app-icon-button--danger {

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import ChannelMemberInlineItem from "./ChannelMemberInlineItem.vue";
-import megaphoneIcon from "../../../assets/icons/megaphone.svg";
 import { useAuthStore } from "../../../stores/auth";
 import { useServerModuleStore } from "../../../stores/serverModule";
 import type { ClientRuntimePresenceMember } from "../../../types/server";
@@ -61,12 +60,19 @@ function isCurrentUser(userId: string): boolean {
         }"
         aria-hidden="true"
       >
-        <span
-          class="server-channel-presence-list-item__icon-mask"
-          :style="{
-            '--server-channel-presence-list-item-icon': `url(${megaphoneIcon})`,
-          }"
-        />
+        <svg
+          class="server-channel-presence-list-item__icon-svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          aria-hidden="true"
+        >
+          <path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />
+          <path d="M6 14a12 12 0 0 0 2.4 7.2a2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14M8 6v8" />
+        </svg>
       </span>
 
       <span class="server-channel-presence-list-item__name dbru-text-sm dbru-text-main">
@@ -138,19 +144,10 @@ function isCurrentUser(userId: string): boolean {
   color: var(--dbru-color-text-muted);
 }
 
-.server-channel-presence-list-item__icon-mask {
+.server-channel-presence-list-item__icon-svg {
   display: block;
   width: 18px;
   height: 18px;
-  background-color: currentColor;
-  mask-image: var(--server-channel-presence-list-item-icon);
-  mask-repeat: no-repeat;
-  mask-position: center;
-  mask-size: contain;
-  -webkit-mask-image: var(--server-channel-presence-list-item-icon);
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  -webkit-mask-size: contain;
 }
 
 .server-channel-presence-list-item__icon--selected {
@@ -178,5 +175,8 @@ function isCurrentUser(userId: string): boolean {
   bottom: 50%;
   left: calc(18px + var(--dbru-space-3));
   border-left: var(--dbru-border-size-1) solid var(--dbru-color-border);
+}
+.server-channel-presence-list-item__count {
+  display: none;
 }
 </style>

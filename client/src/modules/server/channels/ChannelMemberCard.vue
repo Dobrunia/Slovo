@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { DbrAvatar, DbrChip } from "dobruniaui-vue";
+import { DbrAvatar, DbrCard, DbrChip } from "dobruniaui-vue";
 import AppIconButton from "../../../components/base/AppIconButton.vue";
 import ConnectionQualityIndicator from "../../../components/base/ConnectionQualityIndicator.vue";
 import VoiceStateIndicators from "../../../components/base/VoiceStateIndicators.vue";
@@ -220,7 +220,8 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
 </script>
 
 <template>
-  <article
+  <DbrCard
+    as="article"
     class="channel-member-card"
     :class="{
       'channel-member-card--speaking': props.speaking,
@@ -392,7 +393,7 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
         </span>
       </button>
     </div>
-  </article>
+  </DbrCard>
 </template>
 
 <style scoped>
@@ -400,8 +401,6 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
   display: grid;
   gap: var(--dbru-space-4);
   padding: var(--dbru-space-5);
-  border: var(--dbru-border-size-1) solid var(--dbru-color-border);
-  border-radius: var(--dbru-radius-lg);
   background: linear-gradient(160deg, var(--dbru-color-surface), var(--dbru-color-bg));
   transition:
     border-color var(--dbru-duration-base) var(--dbru-ease-standard),
@@ -577,5 +576,22 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
   border-radius: var(--dbru-radius-full);
   background: var(--dbru-color-surface);
   line-height: 32px;
+}
+.channel-member-card {
+  border: 0;
+  border-radius: inherit;
+  background: var(--dbru-color-surface);
+  box-shadow: none;
+}
+
+.channel-member-card--current-user {
+  background: color-mix(in srgb, var(--dbru-color-primary) 8%, var(--dbru-color-surface));
+  box-shadow: 0 0 0 1px var(--dbru-color-primary);
+}
+
+.channel-member-card--speaking {
+  box-shadow:
+    0 0 0 1px var(--dbru-color-success),
+    0 0 0 4px color-mix(in srgb, var(--dbru-color-success) 18%, transparent);
 }
 </style>
