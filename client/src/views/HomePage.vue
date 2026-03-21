@@ -20,6 +20,8 @@ import {
   readSelectedServerIdFromRouteParams,
 } from "../router/serverRoutes";
 import { useHomePageRealtime } from "../composables/useHomePageRealtime";
+import { useVoiceConnectionQualityTelemetry } from "../composables/useVoiceConnectionQualityTelemetry";
+import { useVoiceSpeakingTelemetry } from "../composables/useVoiceSpeakingTelemetry";
 import { useAuthStore } from "../stores/auth";
 import { useServersStore } from "../stores/servers";
 import { useServerModuleStore } from "../stores/serverModule";
@@ -104,6 +106,8 @@ useHomePageRealtime({
   authStore,
   serverModuleStore,
 });
+useVoiceSpeakingTelemetry();
+useVoiceConnectionQualityTelemetry();
 
 /**
  * Переключает видимость модального окна с настройками пользователя.

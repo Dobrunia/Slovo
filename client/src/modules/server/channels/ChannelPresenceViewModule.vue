@@ -1,161 +1,150 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import globalBack from "../../../assets/global_back.png";
-import { useAuthStore } from "../../../stores/auth";
 import ChannelMemberCard from "./ChannelMemberCard.vue";
-import ChannelScreenShareCard from "./ChannelScreenShareCard.vue";
+import { useAuthStore } from "../../../stores/auth";
 import { useServerModuleStore } from "../../../stores/serverModule";
 
-const props = defineProps<{
+interface ChannelPresenceViewModuleProps {
   selectedChannelId: string | null;
-}>();
+}
+
+const props = defineProps<ChannelPresenceViewModuleProps>();
 
 const authStore = useAuthStore();
 const serverModuleStore = useServerModuleStore();
+const currentUserId = computed(() => authStore.currentUser?.id ?? null);
 
 /**
- * Возвращает выбранный канал из текущего snapshot-а сервера.
+ * Возвращает snapshot открытого сервера.
+ */
+const snapshot = computed(() => serverModuleStore.snapshot);
+
+/**
+ * Возвращает выбранный канал внутри открытого сервера.
  */
 const selectedChannel = computed(() => {
   if (!props.selectedChannelId) {
     return null;
   }
 
-  return (
-    serverModuleStore.snapshot?.channels.find(
-      (channel) => channel.id === props.selectedChannelId,
-    ) ?? null
-  );
+  return snapshot.value?.channels.find((channel) => channel.id === props.selectedChannelId) ?? null;
 });
 
 /**
- * Возвращает участников выбранного канала по runtime presence.
+ * Возвращает runtime-участников выбранного канала.
  */
-const selectedChannelMembers = computed(() => {
+const selectedChannelParticipants = computed(() => {
   if (!props.selectedChannelId) {
     return [];
   }
 
-  return serverModuleStore.presenceMembers.filter(
-    (member) => member.channelId === props.selectedChannelId,
-  );
+  return [...serverModuleStore.presenceMembers]
+    .filter((participant) => participant.channelId === props.selectedChannelId)
+    .sort((left, right) => {
+      if (left.userId === currentUserId.value) {
+        return -1;
+      }
+
+      if (right.userId === currentUserId.value) {
+        return 1;
+      }
+
+      return left.joinedAt.localeCompare(right.joinedAt);
+    });
 });
 
 /**
- * Возвращает название текущего сервера для служебного подзаголовка.
+ * Возвращает `true`, если карточка принадлежит текущему пользователю.
  */
-const selectedServerName = computed(
-  () => serverModuleStore.snapshot?.server.name ?? "Сервер",
-);
+function isCurrentUser(userId: string): boolean {
+  return authStore.currentUser?.id === userId;
+}
 
 /**
- * Возвращает готовые к рендеру демонстрации экрана активного канала.
+ * Возвращает username для карточки участника или `null`, если сервер еще не отдает его явно.
  */
-const selectedChannelScreenShares = computed(() => {
-  if (
-    !props.selectedChannelId ||
-    !serverModuleStore.currentUserPresence ||
-    serverModuleStore.currentUserPresence.channelId !== props.selectedChannelId ||
-    serverModuleStore.currentUserPresence.serverId !== serverModuleStore.selectedServerId
-  ) {
-    return [];
+function getParticipantUsername(userId: string): string | null {
+  if (authStore.currentUser?.id === userId) {
+    return authStore.currentUser.username;
   }
 
-  return serverModuleStore.screenShareStreams.map((screenShareStream) => {
-    const currentUser = authStore.currentUser;
-    const participant =
-      currentUser?.id === screenShareStream.userId
-        ? {
-            displayName: currentUser.displayName,
-            avatarUrl: currentUser.avatarUrl ?? null,
-          }
-        : (selectedChannelMembers.value.find(
-            (member) => member.userId === screenShareStream.userId,
-          ) ?? {
-            displayName: "Участник",
-            avatarUrl: null,
-          });
+  return null;
+}
 
-    return {
-      ...screenShareStream,
-      displayName: participant.displayName,
-      avatarUrl: participant.avatarUrl,
-    };
-  });
-});
+/**
+ * Возвращает доступный stream демонстрации экрана участника.
+ */
+function getParticipantScreenShareStream(userId: string): MediaStream | null {
+  return (
+    serverModuleStore.screenShareStreams.find((stream) => stream.userId === userId)?.stream ?? null
+  );
+}
 </script>
 
 <template>
   <section class="channel-presence-view-module">
-    <div class="channel-presence-view-module__background">
-      <img
-        class="channel-presence-view-module__background-image"
-        :src="globalBack"
-        alt=""
+    <template v-if="selectedChannel">
+      <header class="channel-presence-view-module__header">
+        <div class="channel-presence-view-module__heading">
+          <p class="channel-presence-view-module__eyebrow dbru-text-xs dbru-text-muted">
+            Выбранный канал
+          </p>
+          <h2 class="channel-presence-view-module__title dbru-text-lg dbru-text-main">
+            {{ selectedChannel.name }}
+          </h2>
+        </div>
+
+        <p class="channel-presence-view-module__meta dbru-text-sm dbru-text-muted">
+          Участников: {{ selectedChannelParticipants.length }}
+        </p>
+      </header>
+
+      <div
+        v-if="selectedChannelParticipants.length > 0"
+        class="channel-presence-view-module__grid"
       >
-    </div>
-
-    <div class="channel-presence-view-module__overlay"></div>
-
-    <div class="channel-presence-view-module__content">
-      <template v-if="selectedChannel">
-        <header class="channel-presence-view-module__header">
-          <h2 class="channel-presence-view-module__title dbru-text-lg dbru-text-main">
-            {{ selectedChannel.name }}
-          </h2>
-          <p class="channel-presence-view-module__subtitle dbru-text-sm dbru-text-muted">
-            {{ selectedServerName }}
-          </p>
-        </header>
-
-        <div
-          v-if="selectedChannelScreenShares.length > 0"
-          class="channel-presence-view-module__screen-shares"
-        >
-          <ChannelScreenShareCard
-            v-for="screenShare in selectedChannelScreenShares"
-            :key="screenShare.userId"
-            :display-name="screenShare.displayName"
-            :avatar-url="screenShare.avatarUrl"
-            :stream="screenShare.stream"
-            :is-current-user="screenShare.isCurrentUser"
-          />
-        </div>
-
-        <div
-          v-if="selectedChannelMembers.length > 0"
-          class="channel-presence-view-module__members"
-        >
-          <ChannelMemberCard
-            v-for="member in selectedChannelMembers"
-            :key="member.userId"
-            :display-name="member.displayName"
-            :avatar-url="member.avatarUrl"
-          />
-        </div>
-
-        <div
-          v-else
-          class="channel-presence-view-module__empty"
-        >
-          <h2 class="channel-presence-view-module__title dbru-text-lg dbru-text-main">
-            {{ selectedChannel.name }}
-          </h2>
-          <p class="channel-presence-view-module__subtitle dbru-text-sm dbru-text-muted">
-            В этом канале пока никого нет.
-          </p>
-        </div>
-      </template>
+        <ChannelMemberCard
+          v-for="participant in selectedChannelParticipants"
+          :key="participant.userId"
+          :participant="participant"
+          :muted="serverModuleStore.getMemberVoiceState(participant.userId).muted"
+          :deafened="serverModuleStore.getMemberVoiceState(participant.userId).deafened"
+          :speaking="serverModuleStore.isMemberSpeaking(participant.userId)"
+          :connection-quality="serverModuleStore.getMemberVoiceState(participant.userId).connectionQuality"
+          :username="getParticipantUsername(participant.userId)"
+          :screen-share-stream="getParticipantScreenShareStream(participant.userId)"
+          :is-current-user="isCurrentUser(participant.userId)"
+        />
+      </div>
 
       <div
         v-else
         class="channel-presence-view-module__empty"
       >
-        <h2 class="channel-presence-view-module__title dbru-text-lg dbru-text-main">
+        <div class="channel-presence-view-module__empty-card">
+          <h3 class="channel-presence-view-module__empty-title dbru-text-base dbru-text-main">
+            В канале пока никого нет
+          </h3>
+          <p class="channel-presence-view-module__empty-copy dbru-text-sm dbru-text-muted">
+            Как только участники подключатся, их карточки появятся здесь.
+          </p>
+        </div>
+      </div>
+    </template>
+
+    <div
+      v-else
+      class="channel-presence-view-module__placeholder"
+    >
+      <div class="channel-presence-view-module__placeholder-card">
+        <p class="channel-presence-view-module__placeholder-eyebrow dbru-text-xs dbru-text-muted">
+          Голосовой канал
+        </p>
+        <h2 class="channel-presence-view-module__placeholder-title dbru-text-lg dbru-text-main">
           Канал не выбран
         </h2>
-        <p class="channel-presence-view-module__subtitle dbru-text-sm dbru-text-muted">
-          Выберите нужный канал слева.
+        <p class="channel-presence-view-module__placeholder-copy dbru-text-sm dbru-text-muted">
+          Выберите канал слева, чтобы посмотреть участников и их текущее состояние.
         </p>
       </div>
     </div>
@@ -164,82 +153,65 @@ const selectedChannelScreenShares = computed(() => {
 
 <style scoped>
 .channel-presence-view-module {
-  position: relative;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--dbru-color-bg);
-}
-
-.channel-presence-view-module__background,
-.channel-presence-view-module__overlay,
-.channel-presence-view-module__content {
-  position: absolute;
-  inset: 0;
-}
-
-.channel-presence-view-module__background {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.channel-presence-view-module__background-image {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  object-position: center center;
-}
-
-.channel-presence-view-module__overlay {
-  background: var(--dbru-color-bg);
-  opacity: 0.84;
-}
-
-.channel-presence-view-module__content {
-  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  gap: var(--dbru-space-5);
-  padding: var(--dbru-space-5);
-  z-index: 1;
+  height: 100%;
+  min-height: 0;
+  background: linear-gradient(180deg, var(--dbru-color-bg), var(--dbru-color-surface));
 }
 
 .channel-presence-view-module__header {
-  display: grid;
-  gap: var(--dbru-space-2);
-  align-content: start;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--dbru-space-4);
+  padding: var(--dbru-space-6);
 }
 
+.channel-presence-view-module__heading {
+  display: grid;
+  gap: var(--dbru-space-1);
+}
+
+.channel-presence-view-module__eyebrow,
 .channel-presence-view-module__title,
-.channel-presence-view-module__subtitle {
+.channel-presence-view-module__meta,
+.channel-presence-view-module__empty-title,
+.channel-presence-view-module__empty-copy,
+.channel-presence-view-module__placeholder-eyebrow,
+.channel-presence-view-module__placeholder-title,
+.channel-presence-view-module__placeholder-copy {
   margin: 0;
 }
 
-.channel-presence-view-module__members {
+.channel-presence-view-module__grid {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   align-content: start;
-  gap: var(--dbru-space-3);
+  gap: var(--dbru-space-4);
   min-height: 0;
+  padding: 0 var(--dbru-space-6) var(--dbru-space-6);
   overflow: auto;
 }
 
-.channel-presence-view-module__screen-shares {
-  display: grid;
-  gap: var(--dbru-space-3);
+.channel-presence-view-module__empty,
+.channel-presence-view-module__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: var(--dbru-space-6);
 }
 
-.channel-presence-view-module__empty {
+.channel-presence-view-module__empty-card,
+.channel-presence-view-module__placeholder-card {
   display: grid;
-  align-content: center;
-  justify-items: center;
   gap: var(--dbru-space-2);
-  min-height: 0;
+  max-width: 420px;
+  padding: var(--dbru-space-6);
+  border: var(--dbru-border-size-1) solid var(--dbru-color-border);
+  border-radius: var(--dbru-radius-xl);
+  background: linear-gradient(160deg, var(--dbru-color-surface), var(--dbru-color-bg));
   text-align: center;
-}
-@media (max-width: 768px) {
-  .channel-presence-view-module__content {
-    padding: var(--dbru-space-4);
-  }
 }
 </style>

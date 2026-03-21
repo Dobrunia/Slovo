@@ -4,6 +4,11 @@
 export type ServerMembershipRole = "OWNER" | "MEMBER";
 
 /**
+ * Градация качества соединения участника voice-канала.
+ */
+export type ClientRealtimeConnectionQuality = "low" | "med" | "good";
+
+/**
  * Краткая клиентская форма сервера для списков и навигации.
  */
 export interface ClientServerListItem {
@@ -246,6 +251,8 @@ export interface ClientVoiceStateUpdatedEventPayload {
   channelId: string;
   muted: boolean;
   deafened: boolean;
+  speaking?: boolean;
+  connectionQuality?: ClientRealtimeConnectionQuality | null;
   occurredAt: string;
 }
 
@@ -255,6 +262,18 @@ export interface ClientVoiceStateUpdatedEventPayload {
 export interface ClientCurrentVoiceState {
   muted: boolean;
   deafened: boolean;
+  speaking?: boolean;
+  connectionQuality?: ClientRealtimeConnectionQuality | null;
+}
+
+/**
+ * Runtime-форма состояния микрофона/наушников конкретного участника канала.
+ */
+export interface ClientRuntimeMemberVoiceState {
+  muted: boolean;
+  deafened: boolean;
+  speaking: boolean;
+  connectionQuality: ClientRealtimeConnectionQuality | null;
 }
 
 /**

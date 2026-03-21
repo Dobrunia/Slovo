@@ -11,6 +11,14 @@ import type { DataLayer } from "../data/prisma.js";
 import type { MediaFoundation } from "../media/foundation.js";
 import { createMediaSignalingBridge } from "../media/signaling-bridge.js";
 import { createRuntimePresenceRegistry, type RuntimePresenceRegistry } from "./presence.js";
+import {
+  clearRuntimeConnectionQuality,
+  createRuntimeConnectionQualityRegistry,
+  readConnectionQualityPayload,
+  readRuntimeConnectionQuality,
+  readSpeakingStatePayload,
+  writeRuntimeConnectionQuality,
+} from "./connection-quality.js";
 import { createRuntimeVoiceStateRegistry } from "./voice-state.js";
 import { createRuntimeScreenShareRegistry } from "./screen-share.js";
 import { createRealtimeChannelJoinAuthorizers } from "./channel-access.js";
@@ -40,6 +48,7 @@ import {
   REALTIME_COMMAND_NAMES,
   REALTIME_EVENT_NAMES,
 } from "../../../shared/realtime/names.js";
+import { REALTIME_VOICE_SIGNAL_TYPES } from "../../../shared/realtime/connection-quality.js";
 
 /**
  * Стандартный transport id для realtime-подключений проекта.
@@ -88,6 +97,13 @@ type RealtimeSocketLike = {
   };
 };
 
+type RuntimeVoiceStateCacheEntry = {
+  muted: boolean;
+  deafened: boolean;
+  speaking: boolean;
+  connectionQuality: "low" | "med" | "good" | null;
+};
+
 /**
  * Строит единый realtime context из уже аутентифицированного Socket.IO-соединения.
  */
@@ -119,6 +135,8 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
   const presenceRegistry = input.presenceRegistry ?? createRuntimePresenceRegistry();
   const voiceStateRegistry = createRuntimeVoiceStateRegistry();
   const screenShareRegistry = createRuntimeScreenShareRegistry();
+  const connectionQualityRegistry = createRuntimeConnectionQualityRegistry();
+  const runtimeVoiceStateCache = new Map<string, RuntimeVoiceStateCacheEntry>();
   const resolvedClientOrigin =
     input.clientOrigin ??
     (process.env.CLIENT_ORIGIN?.trim() || DEFAULT_CLIENT_ORIGIN);
@@ -242,6 +260,14 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
             serverId: currentPresence.serverId,
             channelId: currentPresence.channelId,
           });
+          runtimeVoiceStateCache.set(userId, {
+            ...readRuntimeVoiceStateCacheEntry(runtimeVoiceStateCache, userId),
+            speaking: false,
+            connectionQuality: readRuntimeConnectionQuality(
+              connectionQualityRegistry,
+              userId,
+            ),
+          });
         }
 
         return result;
@@ -297,6 +323,8 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           });
         }
         voiceStateRegistry.clearState(userId);
+        runtimeVoiceStateCache.delete(userId);
+        clearRuntimeConnectionQuality(connectionQualityRegistry, userId);
 
         return result;
       },
@@ -360,6 +388,14 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
             serverId: currentPresence.serverId,
             channelId: currentPresence.channelId,
           });
+          runtimeVoiceStateCache.set(userId, {
+            ...readRuntimeVoiceStateCacheEntry(runtimeVoiceStateCache, userId),
+            speaking: false,
+            connectionQuality: readRuntimeConnectionQuality(
+              connectionQualityRegistry,
+              userId,
+            ),
+          });
         }
 
         return result;
@@ -385,7 +421,18 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           emitVoiceStateUpdated: (payload) =>
             runtime.emitEvent(
               REALTIME_EVENT_NAMES.voiceStateUpdated as never,
-              payload as never,
+              {
+                ...payload,
+                speaking: updateRuntimeVoiceStateCache(runtimeVoiceStateCache, userId, {
+                  muted: payload.muted,
+                  deafened: payload.deafened,
+                  speaking: payload.muted ? false : undefined,
+                }).speaking,
+                connectionQuality: readRuntimeConnectionQuality(
+                  connectionQualityRegistry,
+                  userId,
+                ),
+              } as never,
               { context } as never,
             ),
         });
@@ -411,9 +458,20 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           emitVoiceStateUpdated: (payload) =>
             runtime.emitEvent(
               REALTIME_EVENT_NAMES.voiceStateUpdated as never,
-              payload as never,
+              {
+                ...payload,
+                speaking: updateRuntimeVoiceStateCache(runtimeVoiceStateCache, userId, {
+                  muted: payload.muted,
+                  deafened: payload.deafened,
+                  speaking: payload.deafened ? false : undefined,
+                }).speaking,
+                connectionQuality: readRuntimeConnectionQuality(
+                  connectionQualityRegistry,
+                  userId,
+                ),
+              } as never,
               { context } as never,
-          ),
+            ),
         });
       },
       [REALTIME_COMMAND_NAMES.setScreenShareActive]: async ({
@@ -457,6 +515,113 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         context: RealtimeServerContext;
       }) => {
         const userId = requireRealtimeUserId(context);
+
+        if (commandInput.signalType === REALTIME_VOICE_SIGNAL_TYPES.speaking) {
+          const currentPresence = presenceRegistry.getUserPresenceRecord(userId);
+
+          if (
+            !currentPresence ||
+            currentPresence.connectionId !== context.connection.id ||
+            currentPresence.serverId !== commandInput.serverId ||
+            currentPresence.channelId !== commandInput.channelId
+          ) {
+            throw new Error("Пользователь должен находиться в активном канале.");
+          }
+
+          const nextSpeaking = readSpeakingStatePayload(commandInput.payloadJson);
+          const nextRuntimeVoiceState = updateRuntimeVoiceStateCache(
+            runtimeVoiceStateCache,
+            userId,
+            {
+              speaking:
+                nextSpeaking &&
+                !readRuntimeVoiceStateCacheEntry(runtimeVoiceStateCache, userId).muted &&
+                !readRuntimeVoiceStateCacheEntry(runtimeVoiceStateCache, userId).deafened,
+            },
+          );
+
+          await runtime.emitEvent(
+            REALTIME_EVENT_NAMES.voiceStateUpdated as never,
+            {
+              serverId: currentPresence.serverId,
+              userId,
+              channelId: currentPresence.channelId,
+              muted: nextRuntimeVoiceState.muted,
+              deafened: nextRuntimeVoiceState.deafened,
+              speaking: nextRuntimeVoiceState.speaking,
+              connectionQuality: nextRuntimeVoiceState.connectionQuality,
+              occurredAt: new Date().toISOString(),
+            } as never,
+            { context } as never,
+          );
+
+          return {
+            ok: true as const,
+          };
+        }
+
+        if (
+          commandInput.signalType === REALTIME_VOICE_SIGNAL_TYPES.connectionQualityProbe
+        ) {
+          const currentPresence = presenceRegistry.getUserPresenceRecord(userId);
+
+          if (
+            !currentPresence ||
+            currentPresence.connectionId !== context.connection.id ||
+            currentPresence.serverId !== commandInput.serverId ||
+            currentPresence.channelId !== commandInput.channelId
+          ) {
+            throw new Error("Пользователь должен находиться в активном канале.");
+          }
+
+          return {
+            ok: true as const,
+          };
+        }
+
+        if (
+          commandInput.signalType === REALTIME_VOICE_SIGNAL_TYPES.connectionQuality
+        ) {
+          const currentPresence = presenceRegistry.getUserPresenceRecord(userId);
+
+          if (
+            !currentPresence ||
+            currentPresence.connectionId !== context.connection.id ||
+            currentPresence.serverId !== commandInput.serverId ||
+            currentPresence.channelId !== commandInput.channelId
+          ) {
+            throw new Error("Пользователь должен находиться в активном канале.");
+          }
+
+          const connectionQuality = readConnectionQualityPayload(commandInput.payloadJson);
+          writeRuntimeConnectionQuality(connectionQualityRegistry, userId, connectionQuality);
+          const nextRuntimeVoiceState = updateRuntimeVoiceStateCache(
+            runtimeVoiceStateCache,
+            userId,
+            {
+              connectionQuality,
+            },
+          );
+
+          await runtime.emitEvent(
+            REALTIME_EVENT_NAMES.voiceStateUpdated as never,
+            {
+              serverId: currentPresence.serverId,
+              userId,
+              channelId: currentPresence.channelId,
+              muted: nextRuntimeVoiceState.muted,
+              deafened: nextRuntimeVoiceState.deafened,
+              speaking: nextRuntimeVoiceState.speaking,
+              connectionQuality: nextRuntimeVoiceState.connectionQuality,
+              occurredAt: new Date().toISOString(),
+            } as never,
+            { context } as never,
+          );
+
+          return {
+            ok: true as const,
+          };
+        }
 
         return mediaSignalingBridge.handleSignal({
           userId,
@@ -510,6 +675,8 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
         channelId: previousPresence.channelId,
       });
       voiceStateRegistry.clearState(userId);
+      runtimeVoiceStateCache.delete(userId);
+      clearRuntimeConnectionQuality(connectionQualityRegistry, userId);
 
       await handleRealtimeDisconnectCleanup({
         userId,
@@ -560,6 +727,9 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
           payload as never,
           createSystemEventEmitOptions() as never,
         ),
+    }).finally(() => {
+      runtimeVoiceStateCache.delete(input.userId);
+      clearRuntimeConnectionQuality(connectionQualityRegistry, input.userId);
     });
   }
 
@@ -592,6 +762,40 @@ export function createRealtimeServerFoundation<TRegistry extends RealtimeRegistr
       }),
     };
   }
+}
+
+/**
+ * Возвращает текущее runtime voice state пользователя или безопасное значение по умолчанию.
+ */
+function readRuntimeVoiceStateCacheEntry(
+  runtimeVoiceStateCache: Map<string, RuntimeVoiceStateCacheEntry>,
+  userId: string,
+): RuntimeVoiceStateCacheEntry {
+  return (
+    runtimeVoiceStateCache.get(userId) ?? {
+      muted: false,
+      deafened: false,
+      speaking: false,
+      connectionQuality: null,
+    }
+  );
+}
+
+/**
+ * Применяет частичное обновление runtime voice state пользователя.
+ */
+function updateRuntimeVoiceStateCache(
+  runtimeVoiceStateCache: Map<string, RuntimeVoiceStateCacheEntry>,
+  userId: string,
+  nextState: Partial<RuntimeVoiceStateCacheEntry>,
+): RuntimeVoiceStateCacheEntry {
+  const previousState = readRuntimeVoiceStateCacheEntry(runtimeVoiceStateCache, userId);
+  const resolvedState = {
+    ...previousState,
+    ...nextState,
+  };
+  runtimeVoiceStateCache.set(userId, resolvedState);
+  return resolvedState;
 }
 
 type CreateRealtimeServerContextInput<

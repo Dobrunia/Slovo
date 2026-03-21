@@ -1,151 +1,132 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { DbrAvatar } from 'dobruniaui-vue';
-import AppIconButton from '../../components/base/AppIconButton.vue';
-import { buildAppServerRoute } from '../../router/serverRoutes';
-import { useAuthStore } from '../../stores/auth';
-import { useServerModuleStore } from '../../stores/serverModule';
-import headphonesIcon from '../../assets/icons/headphones.svg';
-import headphonesOffIcon from '../../assets/icons/headphones-off.svg';
-import micIcon from '../../assets/icons/mic.svg';
-import micOffIcon from '../../assets/icons/mic-off.svg';
-import phoneDownIcon from '../../assets/icons/phone-down.svg';
-import screenShareIcon from '../../assets/icons/screen-share.svg';
-import screenShareOffIcon from '../../assets/icons/screen-share-off.svg';
+import { computed } from "vue";
+import { DbrAvatar } from "dobruniaui-vue";
+import AppIconButton from "../../components/base/AppIconButton.vue";
+import { useAuthStore } from "../../stores/auth";
+import { useServerModuleStore } from "../../stores/serverModule";
+import phoneDownIcon from "../../assets/icons/phone-down.svg";
+import screenShareIcon from "../../assets/icons/screen-share.svg";
+import screenShareOffIcon from "../../assets/icons/screen-share-off.svg";
 
-const router = useRouter();
 const authStore = useAuthStore();
 const serverModuleStore = useServerModuleStore();
-const isVoiceControlSubmitting = ref(false);
-const isScreenShareSubmitting = ref(false);
 
 /**
- * Отображаемое имя текущего пользователя.
+ * Возвращает текущего пользователя из auth store.
  */
-const displayName = computed(() => authStore.currentUser?.displayName ?? 'Пользователь');
+const currentUser = computed(() => authStore.currentUser);
 
 /**
- * Username текущего пользователя в формате handle.
+ * Возвращает active voice presence текущего пользователя.
  */
-const handle = computed(() => {
-  const username = authStore.currentUser?.username;
-  return username ? `@${username}` : '@slovo-user';
+const currentUserPresence = computed(() => serverModuleStore.currentUserPresence);
+
+/**
+ * Возвращает voice state текущего пользователя.
+ */
+const currentVoiceState = computed(() => serverModuleStore.currentVoiceState);
+
+/**
+ * Возвращает локальное состояние активной демонстрации экрана.
+ */
+const currentUserScreenShareState = computed(() => serverModuleStore.currentUserScreenShareState);
+
+/**
+ * Возвращает подпись под именем пользователя в control panel.
+ */
+const secondaryLabel = computed(() => {
+  if (currentUserPresence.value) {
+    return "Подключен к голосовому каналу";
+  }
+
+  return currentUser.value?.username ?? "";
 });
 
 /**
- * Есть ли у текущего пользователя активное presence в голосовом канале.
- */
-const hasActiveChannelPresence = computed(() => Boolean(serverModuleStore.currentUserPresence));
-const isMicrophoneMuted = computed(
-  () => serverModuleStore.currentVoiceState.muted || serverModuleStore.currentVoiceState.deafened
-);
-const isHeadphonesMuted = computed(() => serverModuleStore.currentVoiceState.deafened);
-const isScreenShareActive = computed(() => Boolean(serverModuleStore.currentUserScreenShareState));
-
-/**
- * Выводит пользователя из текущего канала и возвращает URL к серверу без channel route.
+ * Выполняет выход из текущего голосового канала.
  */
 async function handleLeaveChannel(): Promise<void> {
-  if (!serverModuleStore.currentUserPresence || !serverModuleStore.selectedServerId) {
-    return;
-  }
-
-  try {
-    await serverModuleStore.leaveCurrentChannel();
-    await router.replace(buildAppServerRoute(serverModuleStore.selectedServerId));
-  } catch {
-    // Ошибка уже отражена в store.
-  }
+  await serverModuleStore.leaveCurrentChannel();
 }
 
 /**
- * Переключает self-mute состояние текущего пользователя.
+ * Переключает состояние микрофона текущего пользователя.
  */
-async function handleToggleMicrophone(): Promise<void> {
-  if (!serverModuleStore.currentUserPresence || isVoiceControlSubmitting.value) {
+async function handleToggleMute(): Promise<void> {
+  if (!currentUserPresence.value) {
     return;
   }
 
-  isVoiceControlSubmitting.value = true;
-
-  try {
-    await serverModuleStore.setSelfMuted(!serverModuleStore.currentVoiceState.muted);
-  } catch {
-    // Ошибка уже отражена в store.
-  } finally {
-    isVoiceControlSubmitting.value = false;
-  }
+  const nextMuted = !(currentVoiceState.value.muted || currentVoiceState.value.deafened);
+  await serverModuleStore.setSelfMuted(nextMuted);
 }
 
 /**
- * Переключает self-deafen состояние текущего пользователя.
+ * Переключает состояние полного отключения звука текущего пользователя.
  */
-async function handleToggleHeadphones(): Promise<void> {
-  if (!serverModuleStore.currentUserPresence || isVoiceControlSubmitting.value) {
+async function handleToggleDeafen(): Promise<void> {
+  if (!currentUserPresence.value) {
     return;
   }
 
-  isVoiceControlSubmitting.value = true;
-
-  try {
-    await serverModuleStore.setSelfDeafened(!serverModuleStore.currentVoiceState.deafened);
-  } catch {
-    // Ошибка уже отражена в store.
-  } finally {
-    isVoiceControlSubmitting.value = false;
-  }
+  await serverModuleStore.setSelfDeafened(!currentVoiceState.value.deafened);
 }
 
 /**
- * Переключает демонстрацию экрана для текущего активного канала.
+ * Переключает демонстрацию экрана текущего пользователя.
  */
 async function handleToggleScreenShare(): Promise<void> {
-  if (!serverModuleStore.currentUserPresence || isScreenShareSubmitting.value) {
+  if (!currentUserPresence.value) {
     return;
   }
 
-  isScreenShareSubmitting.value = true;
-
-  try {
-    await serverModuleStore.setScreenShareActive(!isScreenShareActive.value);
-  } catch {
-    // Ошибка уже отражена в store.
-  } finally {
-    isScreenShareSubmitting.value = false;
-  }
+  await serverModuleStore.setScreenShareActive(!currentUserScreenShareState.value);
 }
 </script>
 
 <template>
   <section class="current-user-control-module">
-    <div class="current-user-control-module__identity">
-      <DbrAvatar :name="displayName" :src="authStore.currentUser?.avatarUrl ?? undefined" />
+    <div
+      v-if="currentUser"
+      class="current-user-control-module__identity"
+      :class="{
+        'current-user-control-module__identity--speaking': currentVoiceState.speaking,
+      }"
+    >
+      <DbrAvatar
+        size="md"
+        :name="currentUser.displayName"
+        :src="currentUser.avatarUrl ?? undefined"
+      />
 
-      <div class="current-user-control-module__text">
-        <p class="current-user-control-module__name dbru-text-base dbru-text-main">
-          {{ displayName }}
+      <div class="current-user-control-module__copy">
+        <p class="current-user-control-module__display-name dbru-text-sm dbru-text-main">
+          {{ currentUser.displayName }}
         </p>
-        <p class="current-user-control-module__handle dbru-text-sm dbru-text-muted">
-          {{ handle }}
+        <p class="current-user-control-module__secondary dbru-text-xs dbru-text-muted">
+          {{ secondaryLabel }}
         </p>
       </div>
 
-      <div class="current-user-control-module__session-actions">
+      <div
+        v-if="currentUserPresence"
+        class="current-user-control-module__session-actions"
+      >
         <AppIconButton
-          v-if="hasActiveChannelPresence"
-          :icon-src="isScreenShareActive ? screenShareOffIcon : screenShareIcon"
+          :icon-src="currentUserScreenShareState ? screenShareOffIcon : screenShareIcon"
           :label="
-            isScreenShareActive ? 'Остановить демонстрацию экрана' : 'Начать демонстрацию экрана'
+            currentUserScreenShareState
+              ? 'Остановить демонстрацию экрана'
+              : 'Начать демонстрацию экрана'
           "
           icon-alt=""
-          :tone="isScreenShareActive ? 'danger' : 'default'"
+          :tone="currentUserScreenShareState ? 'danger' : 'default'"
           @click="handleToggleScreenShare"
         />
+
         <AppIconButton
-          v-if="hasActiveChannelPresence"
           :icon-src="phoneDownIcon"
-          label="Покинуть канал"
+          label="Покинуть голосовой канал"
           icon-alt=""
           tone="danger"
           @click="handleLeaveChannel"
@@ -154,51 +135,82 @@ async function handleToggleScreenShare(): Promise<void> {
     </div>
 
     <div class="current-user-control-module__controls">
-      <AppIconButton
-        :icon-src="isMicrophoneMuted ? micOffIcon : micIcon"
-        :label="isMicrophoneMuted ? 'Включить микрофон' : 'Выключить микрофон'"
-        icon-alt=""
-        :tone="isMicrophoneMuted ? 'danger' : 'default'"
-        @click="handleToggleMicrophone"
-      />
+      <button
+        type="button"
+        class="current-user-control-module__toggle dbru-reduced-motion"
+        :class="{
+          'current-user-control-module__toggle--off':
+            currentVoiceState.muted || currentVoiceState.deafened,
+        }"
+        :disabled="!currentUserPresence"
+        aria-label="Переключить микрофон"
+        @click="handleToggleMute"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 1 1-6 0V6a3 3 0 0 1 3-3Z" />
+          <path d="M19 11a7 7 0 0 1-12.02 4.95" />
+          <path d="M5 11a7 7 0 0 0 11.66 5.03" />
+          <path d="M12 18v3" />
+          <path d="M8 21h8" />
+          <path
+            v-if="currentVoiceState.muted || currentVoiceState.deafened"
+            d="M4 4l16 16"
+          />
+        </svg>
+      </button>
 
-      <AppIconButton
-        :icon-src="isHeadphonesMuted ? headphonesOffIcon : headphonesIcon"
-        :label="isHeadphonesMuted ? 'Включить звук' : 'Выключить звук'"
-        icon-alt=""
-        :tone="isHeadphonesMuted ? 'danger' : 'default'"
-        @click="handleToggleHeadphones"
-      />
+      <button
+        type="button"
+        class="current-user-control-module__toggle dbru-reduced-motion"
+        :class="{
+          'current-user-control-module__toggle--off': currentVoiceState.deafened,
+        }"
+        :disabled="!currentUserPresence"
+        aria-label="Переключить полное отключение звука"
+        @click="handleToggleDeafen"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 14v-4a2 2 0 0 1 2-2h3l4-4v16l-4-4H5a2 2 0 0 1-2-2Z" />
+          <path d="M14 9a5 5 0 0 1 0 6" />
+          <path d="M17 6a9 9 0 0 1 0 12" />
+          <path v-if="currentVoiceState.deafened" d="M4 4l16 16" />
+        </svg>
+      </button>
     </div>
   </section>
 </template>
 
 <style scoped>
 .current-user-control-module {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
   gap: var(--dbru-space-3);
-  padding: var(--dbru-space-4) var(--dbru-space-5);
+  padding: var(--dbru-space-4);
+  border-top: var(--dbru-border-size-1) solid var(--dbru-color-border);
   background: var(--dbru-color-bg);
-  border-bottom: var(--dbru-border-size-1) solid var(--dbru-color-border);
 }
 
 .current-user-control-module__identity {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--dbru-space-3);
-  min-width: 0;
-  flex: 1 1 auto;
+  padding: var(--dbru-space-3);
+  border-radius: var(--dbru-radius-lg);
+  background: var(--dbru-color-surface);
 }
 
-.current-user-control-module__text {
+.current-user-control-module__identity--speaking {
+  box-shadow: inset 0 0 0 1px var(--dbru-color-success);
+}
+
+.current-user-control-module__copy {
+  min-width: 0;
   display: grid;
-  min-width: 0;
+  gap: 2px;
 }
 
-.current-user-control-module__name,
-.current-user-control-module__handle {
+.current-user-control-module__display-name,
+.current-user-control-module__secondary {
   margin: 0;
   min-width: 0;
   overflow: hidden;
@@ -208,28 +220,56 @@ async function handleToggleScreenShare(): Promise<void> {
 
 .current-user-control-module__session-actions,
 .current-user-control-module__controls {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--dbru-space-2);
 }
 
-.current-user-control-module__session-actions {
-  min-width: 0;
+.current-user-control-module__controls {
+  justify-content: flex-start;
 }
 
-@media (max-width: 768px) {
-  .current-user-control-module {
-    flex-direction: column;
-    align-items: stretch;
-  }
+.current-user-control-module__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dbru-radius-full);
+  background: var(--dbru-color-surface);
+  color: var(--dbru-color-text);
+  cursor: pointer;
+  transition:
+    background-color var(--dbru-duration-base) var(--dbru-ease-standard),
+    color var(--dbru-duration-base) var(--dbru-ease-standard),
+    transform var(--dbru-duration-base) var(--dbru-ease-standard);
+}
 
-  .current-user-control-module__identity,
-  .current-user-control-module__controls {
-    width: 100%;
-  }
+.current-user-control-module__toggle:hover:not(:disabled) {
+  background: var(--dbru-color-border);
+}
 
-  .current-user-control-module__controls {
-    justify-content: flex-end;
-  }
+.current-user-control-module__toggle:focus-visible {
+  outline: var(--dbru-border-size-2) solid var(--dbru-color-focus);
+  outline-offset: 2px;
+}
+
+.current-user-control-module__toggle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.current-user-control-module__toggle--off {
+  background: var(--dbru-color-surface);
+  color: var(--dbru-color-error);
+  box-shadow: inset 0 0 0 1px var(--dbru-color-error);
+}
+
+.current-user-control-module__toggle svg {
+  display: block;
+  width: 18px;
+  height: 18px;
 }
 </style>

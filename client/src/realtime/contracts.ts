@@ -30,6 +30,7 @@ const payloadJsonSchema = z
   .string()
   .min(1)
   .max(REALTIME_SIGNAL_PAYLOAD_JSON_MAX_LENGTH);
+const connectionQualitySchema = z.enum(["low", "med", "good"]).nullable();
 
 const serverMembershipRoleSchema = z.enum(["OWNER", "MEMBER"]);
 const userServersActionSchema = z.enum(["created", "joined", "deleted"]);
@@ -94,6 +95,7 @@ export const realtimeCommands: ReturnType<typeof command>[] = [
   command(realtimeNames.commands.leaveVoiceChannel, {
     input: z.object({
       serverId: serverIdSchema,
+      channelId: channelIdSchema,
     }),
     ack: okAckSchema,
   }),
@@ -101,12 +103,14 @@ export const realtimeCommands: ReturnType<typeof command>[] = [
     input: z.object({
       serverId: serverIdSchema,
       channelId: channelIdSchema,
+      targetChannelId: channelIdSchema,
     }),
     ack: okAckSchema,
   }),
   command(realtimeNames.commands.setSelfMute, {
     input: z.object({
       serverId: serverIdSchema,
+      channelId: channelIdSchema,
       muted: z.boolean(),
     }),
     ack: okAckSchema,
@@ -114,6 +118,7 @@ export const realtimeCommands: ReturnType<typeof command>[] = [
   command(realtimeNames.commands.setSelfDeafen, {
     input: z.object({
       serverId: serverIdSchema,
+      channelId: channelIdSchema,
       deafened: z.boolean(),
     }),
     ack: okAckSchema,
@@ -121,6 +126,7 @@ export const realtimeCommands: ReturnType<typeof command>[] = [
   command(realtimeNames.commands.setScreenShareActive, {
     input: z.object({
       serverId: serverIdSchema,
+      channelId: channelIdSchema,
       active: z.boolean(),
     }),
     ack: okAckSchema,
@@ -197,6 +203,8 @@ export const realtimeEvents = [
       channelId: channelIdSchema,
       muted: z.boolean(),
       deafened: z.boolean(),
+      speaking: z.boolean().optional(),
+      connectionQuality: connectionQualitySchema.optional(),
       occurredAt: occurredAtSchema,
     }),
   }),

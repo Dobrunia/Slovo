@@ -1075,6 +1075,8 @@ describe("server module store", () => {
     expect(serverModuleStore.currentVoiceState).toEqual({
       muted: false,
       deafened: false,
+      speaking: false,
+      connectionQuality: null,
     });
 
     serverModuleStore.applyVoiceStateUpdated({
@@ -1089,6 +1091,8 @@ describe("server module store", () => {
     expect(serverModuleStore.currentVoiceState).toEqual({
       muted: true,
       deafened: false,
+      speaking: false,
+      connectionQuality: null,
     });
   });
 
@@ -1565,6 +1569,8 @@ describe("server module store", () => {
     expect(serverModuleStore.currentVoiceState).toEqual({
       muted: true,
       deafened: false,
+      speaking: false,
+      connectionQuality: null,
     });
 
     await serverModuleStore.openServer("server-1");
@@ -1625,6 +1631,134 @@ describe("server module store", () => {
       avatarUrl: null,
       channelId: "channel-9",
       joinedAt: expect.any(String),
+    });
+  });
+
+  /**
+   * Проверяется, что live-обновление voice state теперь применяется не только
+   * к текущему пользователю, но и к любому участнику канала.
+   * Это важно, потому что список участников и карточки в центре должны показывать,
+   * кто замьючен, кто оглушен и кто сейчас говорит, для всех клиентов одинаково.
+   * Граничные случаи: обновление приходит для другого пользователя,
+   * поэтому собственный currentVoiceState клиента меняться не должен.
+   */
+  test("should keep runtime voice state for other channel members", () => {
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+
+    const serverModuleStore = useServerModuleStore();
+
+    serverModuleStore.applyVoiceStateUpdated({
+      serverId: "server-1",
+      userId: "user-2",
+      channelId: "channel-1",
+      muted: true,
+      deafened: true,
+      speaking: false,
+      occurredAt: "2026-03-21T12:00:00.000Z",
+    });
+
+    expect(serverModuleStore.getMemberVoiceState("user-2")).toEqual({
+      muted: true,
+      deafened: true,
+      speaking: false,
+      connectionQuality: null,
+    });
+    expect(serverModuleStore.currentVoiceState).toEqual({
+      muted: false,
+      deafened: false,
+      speaking: false,
+      connectionQuality: null,
+    });
+  });
+
+  /**
+   * Проверяется, что server-authoritative presence cleanup удаляет локальное
+   * voice state участника, покинувшего канал, чтобы UI не показывал старые mute/deafen
+   * индикаторы после выхода или переключения пользователя.
+   * Это важно, потому что иначе рядом с новым участником с тем же id в сторе
+   * может остаться устаревшее состояние предыдущей сессии.
+   * Граничные случаи: сначала пользователь входит в канал и получает voice state,
+   * затем приходит событие `left` для того же пользователя.
+   */
+  test("should clear member voice state when the participant leaves the channel", () => {
+    const serverModuleStore = useServerModuleStore();
+
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-2",
+        displayName: "Участник",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-21T12:00:00.000Z",
+      },
+      previousChannelId: null,
+      action: "joined",
+      occurredAt: "2026-03-21T12:00:00.000Z",
+    });
+    serverModuleStore.applyVoiceStateUpdated({
+      serverId: "server-1",
+      userId: "user-2",
+      channelId: "channel-1",
+      muted: true,
+      deafened: false,
+      speaking: true,
+      occurredAt: "2026-03-21T12:01:00.000Z",
+    });
+
+    serverModuleStore.applyPresenceUpdated({
+      serverId: "server-1",
+      member: {
+        userId: "user-2",
+        displayName: "Участник",
+        avatarUrl: null,
+        channelId: "channel-1",
+        joinedAt: "2026-03-21T12:00:00.000Z",
+      },
+      previousChannelId: "channel-1",
+      action: "left",
+      occurredAt: "2026-03-21T12:02:00.000Z",
+    });
+
+    expect(serverModuleStore.getMemberVoiceState("user-2")).toEqual({
+      muted: false,
+      deafened: false,
+      speaking: false,
+      connectionQuality: null,
+    });
+  });
+
+  /**
+   * Проверяется, что live-обновление voice state может нести и качество соединения
+   * участника, а store сохраняет его рядом с mute/deafen/speaking без отдельного side-state.
+   * Это важно, потому что sidebar-компонент участника канала теперь показывает
+   * и сетевой статус, и все эти данные должны обновляться из одного realtime payload.
+   * Граничные случаи: качество приходит для другого пользователя и не должно ломать
+   * локальное состояние текущего пользователя.
+   */
+  test("should keep connection quality inside the member voice state payload", () => {
+    const authStore = useAuthStore();
+    authStore.currentUser = testUser;
+
+    const serverModuleStore = useServerModuleStore();
+
+    serverModuleStore.applyVoiceStateUpdated({
+      serverId: "server-1",
+      userId: "user-3",
+      channelId: "channel-1",
+      muted: false,
+      deafened: false,
+      speaking: false,
+      connectionQuality: "med",
+      occurredAt: "2026-03-21T12:03:00.000Z",
+    });
+
+    expect(serverModuleStore.getMemberVoiceState("user-3")).toEqual({
+      muted: false,
+      deafened: false,
+      speaking: false,
+      connectionQuality: "med",
     });
   });
 });

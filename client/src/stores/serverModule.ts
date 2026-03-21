@@ -21,6 +21,7 @@ import type {
   ClientServerMember,
   ClientPresenceUpdatedEventPayload,
   ClientCurrentVoiceState,
+  ClientRuntimeMemberVoiceState,
   ClientRuntimeScreenShareState,
   ClientRuntimePresenceMember,
   ClientScreenShareUpdatedEventPayload,
@@ -66,9 +67,12 @@ export const useServerModuleStore = defineStore("serverModule", () => {
   const activeVoicePresence = ref<ClientActiveVoicePresence | null>(null);
   const screenShareStates = ref<ClientRuntimeScreenShareState[]>([]);
   const screenShareStreams = ref<ClientVoiceScreenShareStream[]>([]);
+  const memberVoiceStates = ref<Record<string, ClientRuntimeMemberVoiceState>>({});
   const currentVoiceState = ref<ClientCurrentVoiceState>({
     muted: false,
     deafened: false,
+    speaking: false,
+    connectionQuality: null,
   });
 
   const serverApiClient = createServerApiClient({
@@ -190,7 +194,10 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     currentVoiceState.value = {
       muted: false,
       deafened: false,
+      speaking: false,
+      connectionQuality: null,
     };
+    memberVoiceStates.value = {};
   }
 
   /**
@@ -631,19 +638,22 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     const currentUserId = useAuthStore().currentUser?.id;
 
     if (payload.member.userId === currentUserId) {
-    if (payload.action === "left") {
-      screenShareStates.value = screenShareStates.value.filter(
-        (state) => state.userId !== payload.member.userId,
-      );
-      screenShareStreams.value = screenShareStreams.value.filter(
-        (stream) => stream.userId !== payload.member.userId,
-      );
+      if (payload.action === "left") {
+        screenShareStates.value = screenShareStates.value.filter(
+          (state) => state.userId !== payload.member.userId,
+        );
+        screenShareStreams.value = screenShareStreams.value.filter(
+          (stream) => stream.userId !== payload.member.userId,
+        );
+        clearMemberVoiceState(payload.member.userId);
 
-      if (activeVoicePresence.value?.serverId === payload.serverId) {
-        activeVoicePresence.value = null;
-        currentVoiceState.value = {
+        if (activeVoicePresence.value?.serverId === payload.serverId) {
+          activeVoicePresence.value = null;
+          currentVoiceState.value = {
             muted: false,
             deafened: false,
+            speaking: false,
+            connectionQuality: null,
           };
 
           if (selectedServerId.value === payload.serverId) {
@@ -655,6 +665,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
           serverId: payload.serverId,
           ...payload.member,
         };
+        ensureMemberVoiceState(payload.member.userId);
 
         if (selectedServerId.value === payload.serverId) {
           selectedChannelId.value = payload.member.channelId;
@@ -663,6 +674,10 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     }
 
     if (!selectedServerId.value || payload.serverId !== selectedServerId.value) {
+      if (payload.action === "left") {
+        clearMemberVoiceState(payload.member.userId);
+      }
+
       return;
     }
 
@@ -670,6 +685,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
       presenceMembers.value = presenceMembers.value.filter(
         (member) => member.userId !== payload.member.userId,
       );
+      clearMemberVoiceState(payload.member.userId);
       return;
     }
 
@@ -687,6 +703,20 @@ export const useServerModuleStore = defineStore("serverModule", () => {
    */
   function applyVoiceStateUpdated(payload: ClientVoiceStateUpdatedEventPayload): void {
     const currentUserId = useAuthStore().currentUser?.id;
+    const nextVoiceState: ClientRuntimeMemberVoiceState = {
+      muted: payload.muted,
+      deafened: payload.deafened,
+      speaking: payload.speaking ?? false,
+      connectionQuality:
+        payload.connectionQuality ??
+        memberVoiceStates.value[payload.userId]?.connectionQuality ??
+        null,
+    };
+
+    memberVoiceStates.value = {
+      ...memberVoiceStates.value,
+      [payload.userId]: nextVoiceState,
+    };
 
     if (!currentUserId || payload.userId !== currentUserId) {
       return;
@@ -695,6 +725,9 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     currentVoiceState.value = {
       muted: payload.muted,
       deafened: payload.deafened,
+      speaking: payload.speaking ?? false,
+      connectionQuality:
+        payload.connectionQuality ?? currentVoiceState.value.connectionQuality ?? null,
     };
   }
 
@@ -1033,7 +1066,10 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     currentVoiceState.value = {
       muted: false,
       deafened: false,
+      speaking: false,
+      connectionQuality: null,
     };
+    clearMemberVoiceState(currentUserId);
 
     if (selectedServerId.value === serverId) {
       selectedChannelId.value = null;
@@ -1064,6 +1100,59 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     if (reason) {
       presenceErrorMessage.value = reason;
     }
+  }
+
+  /**
+   * Возвращает runtime voice state участника канала.
+   */
+  function getMemberVoiceState(userId: string): ClientRuntimeMemberVoiceState {
+    return ensureMemberVoiceState(userId);
+  }
+
+  /**
+   * Возвращает `true`, если участник сейчас говорит в канале.
+   */
+  function isMemberSpeaking(userId: string): boolean {
+    return getMemberVoiceState(userId).speaking;
+  }
+
+  /**
+   * Гарантирует наличие voice state для участника и возвращает его.
+   */
+  function ensureMemberVoiceState(userId: string): ClientRuntimeMemberVoiceState {
+    const existingState = memberVoiceStates.value[userId];
+
+    if (existingState) {
+      return existingState;
+    }
+
+    const nextState: ClientRuntimeMemberVoiceState = {
+      muted: false,
+      deafened: false,
+      speaking: false,
+      connectionQuality: null,
+    };
+    memberVoiceStates.value = {
+      ...memberVoiceStates.value,
+      [userId]: nextState,
+    };
+
+    return nextState;
+  }
+
+  /**
+   * Удаляет runtime voice state участника, покинувшего канал.
+   */
+  function clearMemberVoiceState(userId: string | null | undefined): void {
+    if (!userId || !memberVoiceStates.value[userId]) {
+      return;
+    }
+
+    const nextStates = {
+      ...memberVoiceStates.value,
+    };
+    delete nextStates[userId];
+    memberVoiceStates.value = nextStates;
   }
 
   /**
@@ -1143,6 +1232,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     activeVoicePresence,
     screenShareStates,
     screenShareStreams,
+    memberVoiceStates,
     currentVoiceState,
     currentUserPresence,
     currentUserScreenShareState,
@@ -1165,6 +1255,8 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     applyPresenceUpdated,
     applyVoiceStateUpdated,
     applyScreenShareUpdated,
+    getMemberVoiceState,
+    isMemberSpeaking,
     joinOrMoveToChannel,
     leaveCurrentChannel,
     setSelfMuted,

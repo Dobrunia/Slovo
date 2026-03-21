@@ -1,34 +1,96 @@
 <script setup lang="ts">
+import { computed } from "vue";
 import { DbrAvatar } from "dobruniaui-vue";
-import type { ClientRuntimePresenceMember } from "../../../types/server";
+import ConnectionQualityIndicator from "../../../components/base/ConnectionQualityIndicator.vue";
+import VoiceStateIndicators from "../../../components/base/VoiceStateIndicators.vue";
+import type {
+  ClientRealtimeConnectionQuality,
+  ClientRuntimePresenceMember,
+} from "../../../types/server";
 
 interface ChannelMemberInlineItemProps {
-  member: ClientRuntimePresenceMember;
+  participant: ClientRuntimePresenceMember;
+  muted: boolean;
+  deafened: boolean;
+  speaking: boolean;
+  connectionQuality: ClientRealtimeConnectionQuality | null;
+  isCurrentUser?: boolean;
 }
 
-defineProps<ChannelMemberInlineItemProps>();
+const props = withDefaults(defineProps<ChannelMemberInlineItemProps>(), {
+  isCurrentUser: false,
+});
+
+/**
+ * Возвращает подпись участника с локальной пометкой для текущего пользователя.
+ */
+const displayName = computed(() =>
+  props.isCurrentUser ? `${props.participant.displayName} (Вы)` : props.participant.displayName,
+);
 </script>
 
 <template>
-  <div class="channel-member-inline-item">
+  <div
+    class="channel-member-inline-item"
+    :class="{
+      'channel-member-inline-item--speaking': props.speaking,
+    }"
+  >
     <DbrAvatar
+      class="channel-member-inline-item__avatar"
       size="sm"
-      :name="member.displayName"
-      :src="member.avatarUrl ?? undefined"
+      :name="props.participant.displayName"
+      :src="props.participant.avatarUrl ?? undefined"
     />
-    <span class="channel-member-inline-item__name dbru-text-sm dbru-text-muted">
-      {{ member.displayName }}
+
+    <span class="channel-member-inline-item__name dbru-text-xs dbru-text-main">
+      {{ displayName }}
+    </span>
+
+    <span class="channel-member-inline-item__meta">
+      <VoiceStateIndicators
+        :muted="props.muted || props.deafened"
+        :deafened="props.deafened"
+        size="xs"
+      />
+      <ConnectionQualityIndicator :quality="props.connectionQuality" />
     </span>
   </div>
 </template>
 
 <style scoped>
 .channel-member-inline-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--dbru-space-2);
+  position: relative;
   min-width: 0;
-  padding-inline-start: calc(var(--dbru-space-5) + var(--dbru-space-3));
+  padding: var(--dbru-space-2) var(--dbru-space-3);
+  border-radius: var(--dbru-radius-md);
+  background: var(--dbru-color-bg);
+  transition:
+    box-shadow var(--dbru-duration-base) var(--dbru-ease-standard),
+    background-color var(--dbru-duration-base) var(--dbru-ease-standard);
+}
+
+.channel-member-inline-item::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: calc(var(--dbru-space-3) * -1);
+  width: var(--dbru-space-3);
+  border-top: var(--dbru-border-size-1) solid var(--dbru-color-border);
+  transform: translateY(-50%);
+}
+
+.channel-member-inline-item--speaking {
+  box-shadow: inset 0 0 0 1px var(--dbru-color-success);
+  background: var(--dbru-color-surface);
+}
+
+.channel-member-inline-item__avatar {
+  flex: 0 0 auto;
 }
 
 .channel-member-inline-item__name {
@@ -36,5 +98,11 @@ defineProps<ChannelMemberInlineItemProps>();
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.channel-member-inline-item__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dbru-space-2);
 }
 </style>
