@@ -127,7 +127,7 @@ function isCurrentUser(userId: string): boolean {
 }
 
 .server-channel-presence-list-item__button:hover {
-  background: var(--dbru-color-bg);
+  background-color: var(--icon-button-hover);
 }
 
 .server-channel-presence-list-item__button:focus-visible {
@@ -178,5 +178,17 @@ function isCurrentUser(userId: string): boolean {
 }
 .server-channel-presence-list-item__count {
   display: none;
+}
+
+.server-channel-presence-list-item--speaking {
+  box-shadow: none;
+  border-color: transparent;
+  outline: none;
+}
+
+.server-channel-presence-list-item--speaking::before,
+.server-channel-presence-list-item--speaking::after {
+  box-shadow: none;
+  outline: none;
 }
 </style>

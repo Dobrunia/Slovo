@@ -86,7 +86,6 @@ const displayName = computed(() =>
 
 .channel-member-inline-item--speaking {
   box-shadow: inset 0 0 0 1px var(--dbru-color-success);
-  background: var(--dbru-color-surface);
 }
 
 .channel-member-inline-item__avatar {
@@ -104,5 +103,22 @@ const displayName = computed(() =>
   display: inline-flex;
   align-items: center;
   gap: var(--dbru-space-2);
+}
+.channel-member-inline-item--speaking {
+  box-shadow: none;
+  border-color: transparent;
+  outline: none;
+}
+
+.channel-member-inline-item--speaking :deep(.dbru-avatar) {
+  box-shadow:
+    0 0 0 2px var(--dbru-color-success),
+    0 0 0 5px color-mix(in srgb, var(--dbru-color-success) 18%, transparent);
+}
+
+.channel-member-inline-item--speaking::before,
+.channel-member-inline-item--speaking::after {
+  box-shadow: none;
+  outline: none;
 }
 </style>

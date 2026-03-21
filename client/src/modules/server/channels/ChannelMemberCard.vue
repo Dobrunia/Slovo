@@ -224,13 +224,15 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
     as="article"
     class="channel-member-card"
     :class="{
-      'channel-member-card--speaking': props.speaking,
       'channel-member-card--current-user': props.isCurrentUser,
     }"
   >
     <div class="channel-member-card__top">
       <DbrAvatar
         class="channel-member-card__avatar"
+        :class="{
+          'channel-member-card__avatar--speaking': props.speaking,
+        }"
         size="lg"
         :name="props.participant.displayName"
         :src="props.participant.avatarUrl ?? undefined"
@@ -401,21 +403,16 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
   display: grid;
   gap: var(--dbru-space-4);
   padding: var(--dbru-space-5);
-  background: linear-gradient(160deg, var(--dbru-color-surface), var(--dbru-color-bg));
-  transition:
-    border-color var(--dbru-duration-base) var(--dbru-ease-standard),
-    box-shadow var(--dbru-duration-base) var(--dbru-ease-standard),
-    transform var(--dbru-duration-base) var(--dbru-ease-standard);
 }
 
 .channel-member-card--current-user {
   border-color: var(--dbru-color-primary);
-  box-shadow: 0 0 0 1px var(--dbru-color-primary);
 }
 
-.channel-member-card--speaking {
-  border-color: var(--dbru-color-success);
-  box-shadow: 0 0 0 1px var(--dbru-color-success);
+.channel-member-card__avatar--speaking {
+  box-shadow:
+    0 0 0 2px var(--dbru-color-success),
+    0 0 0 5px color-mix(in srgb, var(--dbru-color-success) 18%, transparent);
 }
 
 .channel-member-card__top {
@@ -587,11 +584,5 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
 .channel-member-card--current-user {
   background: color-mix(in srgb, var(--dbru-color-primary) 8%, var(--dbru-color-surface));
   box-shadow: 0 0 0 1px var(--dbru-color-primary);
-}
-
-.channel-member-card--speaking {
-  box-shadow:
-    0 0 0 1px var(--dbru-color-success),
-    0 0 0 4px color-mix(in srgb, var(--dbru-color-success) 18%, transparent);
 }
 </style>

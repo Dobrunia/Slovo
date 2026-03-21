@@ -20,6 +20,7 @@ import {
   readSelectedServerIdFromRouteParams,
 } from "../router/serverRoutes";
 import { useHomePageRealtime } from "../composables/useHomePageRealtime";
+import { useChannelEventSounds } from "../composables/useChannelEventSounds";
 import { useVoiceConnectionQualityTelemetry } from "../composables/useVoiceConnectionQualityTelemetry";
 import { useVoiceSpeakingTelemetry } from "../composables/useVoiceSpeakingTelemetry";
 import { useAuthStore } from "../stores/auth";
@@ -106,6 +107,7 @@ useHomePageRealtime({
   authStore,
   serverModuleStore,
 });
+useChannelEventSounds(serverModuleStore);
 useVoiceSpeakingTelemetry();
 useVoiceConnectionQualityTelemetry();
 

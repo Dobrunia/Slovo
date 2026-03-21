@@ -1,106 +1,80 @@
 import { useSound } from "@vueuse/sound";
-import { Howler } from "howler";
-import joinChannelSound from "../assets/sounds/join-channel.mp3";
-import leaveChannelSound from "../assets/sounds/leave-channel.mp3";
-import { useUserPreferences } from "./useUserPreferences";
+import joinChannelSoundSrc from "../assets/sounds/join-channel.mp3";
+import leaveChannelSoundSrc from "../assets/sounds/leave-channel.mp3";
+import muteUnmuteSoundSrc from "../assets/sounds/mute-unmute.mp3";
+import startStreamSoundSrc from "../assets/sounds/start-stream.mp3";
+import stopStreamSoundSrc from "../assets/sounds/stop-stream.mp3";
 
-const IS_TEST_ENV =
-  typeof import.meta !== "undefined" &&
-  Boolean(import.meta.env) &&
-  import.meta.env.MODE === "test";
-
-let isAudioUnlocked = IS_TEST_ENV;
-let areUnlockListenersRegistered = false;
+const SOUND_ENABLED_STORAGE_KEY = "slovo.sound-enabled";
 
 /**
- * Возвращает единый набор коротких UI-звуков приложения.
- *
- * Playback до первого user gesture не запускается вообще: это убирает
- * howler warnings про blocked AudioContext и browser autoplay policy.
+ * Проверяет, разрешены ли звуки пользовательской настройкой.
  */
-export function useAppSounds() {
-  const { isSoundEnabled } = useUserPreferences();
-  const { play: playJoinChannelSoundRaw } = useSound(joinChannelSound, {
-    interrupt: true,
-  });
-  const { play: playLeaveChannelSoundRaw } = useSound(leaveChannelSound, {
-    interrupt: true,
-  });
-
-  registerAudioUnlockListeners();
-
-  /**
-   * Проигрывает звук входа в канал, если глобальные звуки включены
-   * и браузер уже разрешил audio playback после пользовательского действия.
-   */
-  function playJoinChannelSound(): void {
-    if (!isSoundEnabled.value || !isAudioUnlocked) {
-      return;
-    }
-
-    playJoinChannelSoundRaw();
+function isSoundEnabled(): boolean {
+  if (typeof window === "undefined") {
+    return true;
   }
 
-  /**
-   * Проигрывает звук выхода из канала, если глобальные звуки включены
-   * и браузер уже разрешил audio playback после пользовательского действия.
-   */
-  function playLeaveChannelSound(): void {
-    if (!isSoundEnabled.value || !isAudioUnlocked) {
-      return;
-    }
-
-    playLeaveChannelSoundRaw();
-  }
-
-  return {
-    playJoinChannelSound,
-    playLeaveChannelSound,
-  };
+  return window.localStorage.getItem(SOUND_ENABLED_STORAGE_KEY) !== "false";
 }
 
 /**
- * Один раз на приложение регистрирует обработчики первого user gesture,
- * который переводит howler AudioContext в рабочее состояние.
+ * Безопасно воспроизводит звук, если он не отключен пользовательской настройкой.
  */
-function registerAudioUnlockListeners(): void {
-  if (typeof window === "undefined" || areUnlockListenersRegistered) {
-    return;
-  }
-
-  areUnlockListenersRegistered = true;
-
-  const unlockAudio = () => {
-    void resumeAudioContext();
-  };
-
-  window.addEventListener("pointerdown", unlockAudio, { passive: true });
-  window.addEventListener("keydown", unlockAudio, { passive: true });
-  window.addEventListener("touchstart", unlockAudio, { passive: true });
-}
-
-/**
- * Пытается возобновить howler AudioContext после подтвержденного user gesture.
- */
-async function resumeAudioContext(): Promise<void> {
-  if (isAudioUnlocked) {
-    return;
-  }
-
-  if (!Howler.ctx) {
-    isAudioUnlocked = true;
-    return;
-  }
-
-  if (Howler.ctx.state === "running") {
-    isAudioUnlocked = true;
+function playIfEnabled(play: () => void): void {
+  if (!isSoundEnabled()) {
     return;
   }
 
   try {
-    await Howler.ctx.resume();
-    isAudioUnlocked = true;
+    play();
   } catch {
-    // Браузер может еще не подтвердить autoplay; повторная попытка будет на следующем user gesture.
+    // Ошибка playback не должна ронять UI-сценарий.
   }
+}
+
+/**
+ * Предоставляет централизованный API UI-звуков приложения.
+ */
+export function useAppSounds() {
+  const { play: playJoinRaw } = useSound(joinChannelSoundSrc);
+  const { play: playLeaveRaw } = useSound(leaveChannelSoundSrc);
+  const { play: playMuteUnmuteRaw } = useSound(muteUnmuteSoundSrc);
+  const { play: playStartStreamRaw } = useSound(startStreamSoundSrc);
+  const { play: playStopStreamRaw } = useSound(stopStreamSoundSrc);
+
+  const playJoin = (): void => {
+    playIfEnabled(playJoinRaw);
+  };
+
+  const playLeave = (): void => {
+    playIfEnabled(playLeaveRaw);
+  };
+
+  const playMuteUnmute = (): void => {
+    playIfEnabled(playMuteUnmuteRaw);
+  };
+
+  const playStartStream = (): void => {
+    playIfEnabled(playStartStreamRaw);
+  };
+
+  const playStopStream = (): void => {
+    playIfEnabled(playStopStreamRaw);
+  };
+
+  return {
+    playJoin,
+    playLeave,
+    playMuteUnmute,
+    playStartStream,
+    playStopStream,
+    playJoinChannel: playJoin,
+    playLeaveChannel: playLeave,
+    playJoinChannelSound: playJoin,
+    playLeaveChannelSound: playLeave,
+    playMuteUnmuteSound: playMuteUnmute,
+    playStartStreamSound: playStartStream,
+    playStopStreamSound: playStopStream,
+  };
 }
