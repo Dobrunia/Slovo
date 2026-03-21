@@ -45,21 +45,6 @@ const screenSharePosterUrl = ref<string | null>(null);
 const previewVideoElement = ref<HTMLVideoElement | null>(null);
 
 /**
- * Возвращает вторичную подпись карточки участника.
- */
-const secondaryLabel = computed(() => {
-  if (props.speaking) {
-    return "Сейчас говорит";
-  }
-
-  if (props.isCurrentUser) {
-    return "Это вы";
-  }
-
-  return "В канале";
-});
-
-/**
  * Возвращает строку username для подписи под displayName.
  */
 const usernameLabel = computed(() => {
@@ -246,9 +231,6 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
       <p class="channel-member-card__username dbru-text-sm dbru-text-muted">
         {{ usernameLabel }}
       </p>
-      <p class="channel-member-card__status dbru-text-xs dbru-text-muted">
-        {{ secondaryLabel }}
-      </p>
       <DbrChip
         v-if="props.screenShareStream"
         class="channel-member-card__stream-chip"
@@ -390,7 +372,7 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
           {{
             props.screenShareStream
               ? 'Смотреть стрим'
-              : 'Стрим пока не запущен'
+              : ''
           }}
         </span>
       </button>
@@ -431,11 +413,14 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
 
 .channel-member-card__name,
 .channel-member-card__username,
-.channel-member-card__status,
 .channel-member-card__voice-level-title,
 .channel-member-card__voice-level-value,
 .channel-member-card__stream-copy {
   margin: 0;
+}
+
+.channel-member-card__avatar {
+  transition: box-shadow 360ms ease;
 }
 
 .channel-member-card__stream-chip {
@@ -452,6 +437,12 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
 .channel-member-card__voice-level {
   display: grid;
   gap: var(--dbru-space-2);
+}
+
+.channel-member-card__voice-level-value {
+  width: 100%;
+  text-align: center;
+  justify-self: center;
 }
 
 .channel-member-card__voice-level-control {

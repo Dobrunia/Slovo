@@ -1673,6 +1673,50 @@ describe("server module store", () => {
   });
 
   /**
+   * Проверяется, что speaking-индикатор не гаснет мгновенно при первом же
+   * payload с `speaking: false`, а держится еще короткое время и только потом сбрасывается.
+   * Это важно, потому что без небольшой задержки зеленая подсветка мигает слишком резко
+   * и визуально дергается у всех участников канала.
+   * Граничные случаи: сначала участник говорит, затем приходит stop-speaking payload,
+   * после чего store обязан временно сохранить `speaking: true`, а потом сам перевести в `false`.
+   */
+  test("should keep speaking state briefly before clearing it", () => {
+    vi.useFakeTimers();
+
+    try {
+      const serverModuleStore = useServerModuleStore();
+
+      serverModuleStore.applyVoiceStateUpdated({
+        serverId: "server-1",
+        userId: "user-2",
+        channelId: "channel-1",
+        muted: false,
+        deafened: false,
+        speaking: true,
+        occurredAt: "2026-03-21T12:04:00.000Z",
+      });
+
+      serverModuleStore.applyVoiceStateUpdated({
+        serverId: "server-1",
+        userId: "user-2",
+        channelId: "channel-1",
+        muted: false,
+        deafened: false,
+        speaking: false,
+        occurredAt: "2026-03-21T12:04:01.000Z",
+      });
+
+      expect(serverModuleStore.getMemberVoiceState("user-2").speaking).toBe(true);
+
+      vi.advanceTimersByTime(281);
+
+      expect(serverModuleStore.getMemberVoiceState("user-2").speaking).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  /**
    * Проверяется, что server-authoritative presence cleanup удаляет локальное
    * voice state участника, покинувшего канал, чтобы UI не показывал старые mute/deafen
    * индикаторы после выхода или переключения пользователя.

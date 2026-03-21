@@ -90,6 +90,7 @@ const displayName = computed(() =>
 
 .channel-member-inline-item__avatar {
   flex: 0 0 auto;
+  transition: box-shadow 360ms ease;
 }
 
 .channel-member-inline-item__name {

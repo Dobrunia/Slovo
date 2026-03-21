@@ -39,6 +39,7 @@ import type {
  * Pinia store модуля выбранного сервера.
  */
 export const useServerModuleStore = defineStore("serverModule", () => {
+  const SPEAKING_DECAY_MS = 280;
   const selectedServerId = ref<string | null>(null);
   const selectedChannelId = ref<string | null>(null);
   const loadedServerId = ref<string | null>(null);
@@ -74,6 +75,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     speaking: false,
     connectionQuality: null,
   });
+  const speakingResetTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
   const serverApiClient = createServerApiClient({
     graphqlUrl: import.meta.env.VITE_GRAPHQL_URL || DEFAULT_CLIENT_GRAPHQL_URL,
@@ -165,6 +167,10 @@ export const useServerModuleStore = defineStore("serverModule", () => {
    * Сбрасывает состояние модуля выбранного сервера.
    */
   function reset(): void {
+    speakingResetTimeouts.forEach((timeoutId) => {
+      clearTimeout(timeoutId);
+    });
+    speakingResetTimeouts.clear();
     selectedServerId.value = null;
     selectedChannelId.value = null;
     loadedServerId.value = null;
@@ -703,20 +709,35 @@ export const useServerModuleStore = defineStore("serverModule", () => {
    */
   function applyVoiceStateUpdated(payload: ClientVoiceStateUpdatedEventPayload): void {
     const currentUserId = useAuthStore().currentUser?.id;
+    const previousVoiceState = memberVoiceStates.value[payload.userId];
+    const nextSpeakingValue = payload.speaking ?? false;
+    const shouldDelaySpeakingReset =
+      previousVoiceState?.speaking === true && nextSpeakingValue === false;
     const nextVoiceState: ClientRuntimeMemberVoiceState = {
       muted: payload.muted,
       deafened: payload.deafened,
-      speaking: payload.speaking ?? false,
+      speaking: shouldDelaySpeakingReset ? true : nextSpeakingValue,
       connectionQuality:
         payload.connectionQuality ??
         memberVoiceStates.value[payload.userId]?.connectionQuality ??
         null,
     };
 
+    if (nextSpeakingValue) {
+      clearSpeakingResetTimeout(payload.userId);
+    }
+
     memberVoiceStates.value = {
       ...memberVoiceStates.value,
       [payload.userId]: nextVoiceState,
     };
+
+    if (shouldDelaySpeakingReset) {
+      scheduleSpeakingReset(
+        payload.userId,
+        Boolean(currentUserId && payload.userId === currentUserId),
+      );
+    }
 
     if (!currentUserId || payload.userId !== currentUserId) {
       return;
@@ -725,7 +746,7 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     currentVoiceState.value = {
       muted: payload.muted,
       deafened: payload.deafened,
-      speaking: payload.speaking ?? false,
+      speaking: shouldDelaySpeakingReset ? true : nextSpeakingValue,
       connectionQuality:
         payload.connectionQuality ?? currentVoiceState.value.connectionQuality ?? null,
     };
@@ -1148,6 +1169,8 @@ export const useServerModuleStore = defineStore("serverModule", () => {
       return;
     }
 
+    clearSpeakingResetTimeout(userId);
+
     const nextStates = {
       ...memberVoiceStates.value,
     };
@@ -1200,6 +1223,52 @@ export const useServerModuleStore = defineStore("serverModule", () => {
     }
 
     return authStore.sessionToken;
+  }
+
+  /**
+   * Очищает отложенный speaking-reset таймер конкретного участника.
+   */
+  function clearSpeakingResetTimeout(userId: string): void {
+    const timeoutId = speakingResetTimeouts.get(userId);
+
+    if (!timeoutId) {
+      return;
+    }
+
+    clearTimeout(timeoutId);
+    speakingResetTimeouts.delete(userId);
+  }
+
+  /**
+   * Сбрасывает speaking-состояние с небольшой задержкой, чтобы индикатор не мигал слишком резко.
+   */
+  function scheduleSpeakingReset(userId: string, isCurrentUser: boolean): void {
+    clearSpeakingResetTimeout(userId);
+
+    const timeoutId = setTimeout(() => {
+      const existingVoiceState = memberVoiceStates.value[userId];
+
+      if (existingVoiceState) {
+        memberVoiceStates.value = {
+          ...memberVoiceStates.value,
+          [userId]: {
+            ...existingVoiceState,
+            speaking: false,
+          },
+        };
+      }
+
+      if (isCurrentUser) {
+        currentVoiceState.value = {
+          ...currentVoiceState.value,
+          speaking: false,
+        };
+      }
+
+      speakingResetTimeouts.delete(userId);
+    }, SPEAKING_DECAY_MS);
+
+    speakingResetTimeouts.set(userId, timeoutId);
   }
 
   return {
