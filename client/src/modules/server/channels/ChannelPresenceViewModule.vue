@@ -112,7 +112,13 @@ function getParticipantScreenShareStream(userId: string): MediaStream | null {
   justify-content: stretch;
   height: 100%;
   min-height: 0;
-  background: var(--dbru-color-bg);
+  background:
+    linear-gradient(
+      color-mix(in srgb, var(--dbru-color-bg) 86%, transparent),
+      color-mix(in srgb, var(--dbru-color-bg) 86%, transparent)
+    ),
+    url("../../../assets/global_back.png") center / cover no-repeat,
+    var(--dbru-color-bg);
 }
 
 .channel-presence-view-module__grid {

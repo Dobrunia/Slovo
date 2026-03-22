@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { RouterView } from 'vue-router';
 
@@ -32,6 +32,18 @@ const guestShellClassName = computed(() =>
       ? 'guest-shell guest-shell--register'
       : 'guest-shell guest-shell--login'
 );
+
+onMounted(() => {
+  document.documentElement.classList.add('dbru-theme-sketch');
+  document.body.classList.add('dbru-theme-sketch');
+  document.getElementById('app')?.classList.add('dbru-theme-sketch');
+});
+
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove('dbru-theme-sketch');
+  document.body.classList.remove('dbru-theme-sketch');
+  document.getElementById('app')?.classList.remove('dbru-theme-sketch');
+});
 </script>
 
 <style scoped>

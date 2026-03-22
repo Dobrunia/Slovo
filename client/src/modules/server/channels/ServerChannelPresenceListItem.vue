@@ -99,6 +99,9 @@ function isCurrentUser(userId: string): boolean {
         :deafened="serverModuleStore.getMemberVoiceState(participant.userId).deafened"
         :speaking="serverModuleStore.isMemberSpeaking(participant.userId)"
         :connection-quality="serverModuleStore.getMemberVoiceState(participant.userId).connectionQuality"
+        :screen-sharing="
+          serverModuleStore.screenShareStates.some((state) => state.userId === participant.userId)
+        "
         :is-current-user="isCurrentUser(participant.userId)"
       />
     </div>

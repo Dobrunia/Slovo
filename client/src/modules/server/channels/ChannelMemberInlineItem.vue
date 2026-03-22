@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { DbrAvatar } from "dobruniaui-vue";
-import ConnectionQualityIndicator from "../../../components/base/ConnectionQualityIndicator.vue";
-import VoiceStateIndicators from "../../../components/base/VoiceStateIndicators.vue";
+import { DbrAvatar, DbrChip } from 'dobruniaui-vue';
+import ConnectionQualityIndicator from '../../../components/base/ConnectionQualityIndicator.vue';
+import VoiceStateIndicators from '../../../components/base/VoiceStateIndicators.vue';
 import type {
   ClientRealtimeConnectionQuality,
   ClientRuntimePresenceMember,
-} from "../../../types/server";
+} from '../../../types/server';
 
 interface ChannelMemberInlineItemProps {
   participant: ClientRuntimePresenceMember;
@@ -14,19 +13,14 @@ interface ChannelMemberInlineItemProps {
   deafened: boolean;
   speaking: boolean;
   connectionQuality: ClientRealtimeConnectionQuality | null;
+  screenSharing?: boolean;
   isCurrentUser?: boolean;
 }
 
 const props = withDefaults(defineProps<ChannelMemberInlineItemProps>(), {
+  screenSharing: false,
   isCurrentUser: false,
 });
-
-/**
- * Возвращает подпись участника с локальной пометкой для текущего пользователя.
- */
-const displayName = computed(() =>
-  props.isCurrentUser ? `${props.participant.displayName} (Вы)` : props.participant.displayName,
-);
 </script>
 
 <template>
@@ -44,8 +38,16 @@ const displayName = computed(() =>
     />
 
     <span class="channel-member-inline-item__name dbru-text-xs dbru-text-main">
-      {{ displayName }}
+      {{ props.participant.displayName }}
     </span>
+
+    <DbrChip
+      v-if="props.screenSharing"
+      class="channel-member-inline-item__stream-chip dbru-text-xs dbru-text-on-danger"
+      variant="danger"
+    >
+      Ведет трансляцию
+    </DbrChip>  
 
     <span class="channel-member-inline-item__meta">
       <VoiceStateIndicators
@@ -61,7 +63,7 @@ const displayName = computed(() =>
 <style scoped>
 .channel-member-inline-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--dbru-space-2);
   position: relative;
@@ -75,7 +77,7 @@ const displayName = computed(() =>
 }
 
 .channel-member-inline-item::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 50%;
   left: calc(var(--dbru-space-3) * -1);
@@ -98,6 +100,11 @@ const displayName = computed(() =>
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.channel-member-inline-item__stream-chip {
+  justify-self: start;
+  height: 22px !important;
 }
 
 .channel-member-inline-item__meta {

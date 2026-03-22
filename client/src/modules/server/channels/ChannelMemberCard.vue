@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { DbrAvatar, DbrCard, DbrChip } from "dobruniaui-vue";
+import { DbrAvatar, DbrCard } from "dobruniaui-vue";
 import AppIconButton from "../../../components/base/AppIconButton.vue";
 import ConnectionQualityIndicator from "../../../components/base/ConnectionQualityIndicator.vue";
 import VoiceStateIndicators from "../../../components/base/VoiceStateIndicators.vue";
@@ -231,13 +231,6 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
       <p class="channel-member-card__username dbru-text-sm dbru-text-muted">
         {{ usernameLabel }}
       </p>
-      <DbrChip
-        v-if="props.screenShareStream"
-        class="channel-member-card__stream-chip"
-        variant="danger"
-      >
-        Ведет трансляцию
-      </DbrChip>
     </div>
 
     <div class="channel-member-card__meta">
@@ -300,7 +293,10 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
       </p>
     </div>
 
-    <div class="channel-member-card__stream">
+    <div
+      v-if="props.screenShareStream"
+      class="channel-member-card__stream"
+    >
       <div
         v-if="props.isCurrentUser && props.screenShareStream"
         class="channel-member-card__stream-placeholder"
@@ -349,10 +345,6 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
         v-else
         type="button"
         class="channel-member-card__stream-cta dbru-reduced-motion"
-        :class="{
-          'channel-member-card__stream-cta--disabled': !props.screenShareStream,
-        }"
-        :disabled="!props.screenShareStream"
         @click="toggleScreenSharePreview"
       >
         <span
@@ -369,11 +361,7 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
         <span class="channel-member-card__stream-cta-overlay" />
 
         <span class="channel-member-card__stream-cta-copy dbru-text-sm dbru-text-main">
-          {{
-            props.screenShareStream
-              ? 'Смотреть стрим'
-              : ''
-          }}
+          Смотреть стрим
         </span>
       </button>
     </div>
@@ -421,10 +409,6 @@ async function captureScreenSharePoster(stream: MediaStream): Promise<void> {
 
 .channel-member-card__avatar {
   transition: box-shadow 360ms ease;
-}
-
-.channel-member-card__stream-chip {
-  justify-self: center;
 }
 
 .channel-member-card__meta {
