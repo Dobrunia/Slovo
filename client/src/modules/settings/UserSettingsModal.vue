@@ -147,7 +147,7 @@ function normalizeDraftAvatarUrl(value: string): string | null {
       />
 
       <DbrToggle
-        size="sm"
+        size="xs"
         v-model="draftIsSoundEnabled"
         label="Включить звуки"
       />

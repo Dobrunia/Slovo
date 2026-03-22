@@ -37,7 +37,6 @@ const guestShellClassName = computed(() =>
 <style scoped>
 .app-shell {
   min-height: 100dvh;
-  background: var(--dbru-color-bg);
   color: var(--dbru-color-text);
 }
 
