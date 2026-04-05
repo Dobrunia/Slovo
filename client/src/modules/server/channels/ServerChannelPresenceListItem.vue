@@ -175,7 +175,7 @@ function isCurrentUser(userId: string): boolean {
   content: "";
   position: absolute;
   top: 0;
-  bottom: 50%;
+  bottom: 26%;
   left: calc(18px + var(--dbru-space-3));
   border-left: var(--dbru-border-size-1) solid var(--dbru-color-border);
 }

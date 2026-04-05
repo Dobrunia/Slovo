@@ -20,10 +20,17 @@ export async function ensureRemoteAudioPlayback(
     return;
   }
 
+  if (!audioElement.paused && !audioElement.ended && audioElement.readyState > 2) {
+    return;
+  }
+
   try {
+    console.log("[voice:playback] play() called, muted:", audioElement.muted, "srcObject:", !!audioElement.srcObject);
     await audioElement.play();
+    console.log("[voice:playback] play() succeeded");
     releaseRemoteAudioPlayback(audioElement);
   } catch (error) {
+    console.warn("[voice:playback] play() blocked by autoplay policy:", error);
     blockedAudioElements.add(audioElement);
     ensureAudioPlaybackUnlockListeners();
     reportRealtimeError(

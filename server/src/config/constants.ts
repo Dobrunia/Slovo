@@ -172,14 +172,16 @@ export const PASSWORD_MAX_LENGTH = 255;
 
 /**
  * Стандартный listen IP для локальных MediaSoup WebRTC transport-ов.
+ * `0.0.0.0` слушает на всех интерфейсах; реальный адрес задаётся через announced address.
  */
-export const DEFAULT_MEDIASOUP_LISTEN_IP = "127.0.0.1";
+export const DEFAULT_MEDIASOUP_LISTEN_IP = "0.0.0.0";
 
 /**
  * Опциональный announced address для MediaSoup transport-ов.
+ * Без env-переменной используется `127.0.0.1` для localhost-разработки.
  */
 export const DEFAULT_MEDIASOUP_ANNOUNCED_ADDRESS =
-  process.env.MEDIASOUP_ANNOUNCED_IP?.trim() || null;
+  process.env.MEDIASOUP_ANNOUNCED_IP?.trim() || "127.0.0.1";
 
 /**
  * Нижняя граница RTC-портов MediaSoup worker-а.

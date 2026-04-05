@@ -32,6 +32,15 @@ type PendingSignalRequest = {
 
 type MediaType = "audio" | "screen";
 
+/**
+ * Публичные STUN-серверы для ICE на стороне браузера (srflx-кандидаты).
+ * Без этого при связи через NAT или при неверном announced IP на сервере часто падает ICE.
+ */
+const DEFAULT_WEBRTC_ICE_SERVERS: RTCIceServer[] = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+];
+
 type RemoteConsumerRecord = {
   consumer: Consumer;
   producerUserId: string;
@@ -232,6 +241,7 @@ class VoiceChannelSession {
    * Поднимает signaling-подписки, transports и audio produce/consume flow.
    */
   async start(): Promise<void> {
+    console.log("[voice] start() — subscribing to signaling & session…");
     this.stopVoiceSignalingSubscription = await subscribeToVoiceSignaling({
       sessionToken: this.sessionToken,
       serverId: this.serverId,
@@ -262,20 +272,25 @@ class VoiceChannelSession {
         }
       },
     });
+    console.log("[voice] subscriptions ready, requesting router capabilities…");
 
     const routerRtpCapabilities = await this.requestSignal(
       "mediasoup.router-capabilities.request",
       {},
       "mediasoup.router-capabilities.response",
     );
+    console.log("[voice] router capabilities received:", routerRtpCapabilities);
 
     this.device = new Device();
     await this.device.load({
       routerRtpCapabilities: routerRtpCapabilities as never,
     });
+    console.log("[voice] Device loaded, creating transports…");
     await this.createSendTransport();
     await this.createReceiveTransport();
+    console.log("[voice] transports created, publishing microphone…");
     await this.startMicrophonePublishing();
+    console.log("[voice] microphone published, syncing remote producers…");
 
     const producersSnapshot = await this.requestSignal<{
       producers: Array<{
@@ -289,10 +304,12 @@ class VoiceChannelSession {
       {},
       "mediasoup.producers.snapshot.response",
     );
+    console.log("[voice] remote producers snapshot:", producersSnapshot.producers);
 
     for (const producer of producersSnapshot.producers ?? []) {
       await this.consumeProducer(producer.producerId);
     }
+    console.log("[voice] start() complete ✓");
   }
 
   /**
@@ -454,9 +471,20 @@ class VoiceChannelSession {
       "mediasoup.transport.create.response",
     );
 
-    const sendTransport = this.device.createSendTransport(sendTransportParams as never);
+    console.log("[voice] send transport params from server:", {
+      id: sendTransportParams.id,
+      iceCandidates: sendTransportParams.iceCandidates,
+    });
+
+    const sendTransport = this.device.createSendTransport({
+      ...sendTransportParams,
+      iceServers: DEFAULT_WEBRTC_ICE_SERVERS,
+    } as never);
+
+    attachTransportDebugListeners(sendTransport, "send");
 
     sendTransport.on("connect", ({ dtlsParameters }, callback, errback) => {
+      console.log("[voice] send transport 'connect' event fired");
       void this.requestSignal(
         "mediasoup.transport.connect.request",
         {
@@ -465,11 +493,15 @@ class VoiceChannelSession {
         },
         "mediasoup.transport.connect.response",
       )
-        .then(() => callback())
+        .then(() => {
+          console.log("[voice] send transport connected via signaling");
+          callback();
+        })
         .catch((error) => errback(toError(error)));
     });
 
     sendTransport.on("produce", ({ kind, rtpParameters, appData }, callback, errback) => {
+      console.log("[voice] send transport 'produce' event, kind:", kind);
       void this.requestSignal<{
         producerId: string;
       }>(
@@ -482,7 +514,10 @@ class VoiceChannelSession {
         },
         "mediasoup.produce.response",
       )
-        .then((response) => callback({ id: response.producerId }))
+        .then((response) => {
+          console.log("[voice] producer created, id:", response.producerId);
+          callback({ id: response.producerId });
+        })
         .catch((error) => errback(toError(error)));
     });
 
@@ -511,9 +546,20 @@ class VoiceChannelSession {
       "mediasoup.transport.create.response",
     );
 
-    const recvTransport = this.device.createRecvTransport(recvTransportParams as never);
+    console.log("[voice] recv transport params from server:", {
+      id: recvTransportParams.id,
+      iceCandidates: recvTransportParams.iceCandidates,
+    });
+
+    const recvTransport = this.device.createRecvTransport({
+      ...recvTransportParams,
+      iceServers: DEFAULT_WEBRTC_ICE_SERVERS,
+    } as never);
+
+    attachTransportDebugListeners(recvTransport, "recv");
 
     recvTransport.on("connect", ({ dtlsParameters }, callback, errback) => {
+      console.log("[voice] recv transport 'connect' event fired");
       void this.requestSignal(
         "mediasoup.transport.connect.request",
         {
@@ -522,7 +568,10 @@ class VoiceChannelSession {
         },
         "mediasoup.transport.connect.response",
       )
-        .then(() => callback())
+        .then(() => {
+          console.log("[voice] recv transport connected via signaling");
+          callback();
+        })
         .catch((error) => errback(toError(error)));
     });
 
@@ -537,7 +586,9 @@ class VoiceChannelSession {
       throw new Error("Send transport не создан.");
     }
 
+    console.log("[voice] capturing microphone, deviceId:", this.inputDeviceId);
     const microphoneTrack = await this.captureMicrophoneTrack(this.inputDeviceId);
+    console.log("[voice] mic track acquired:", microphoneTrack.label, "enabled:", microphoneTrack.enabled, "readyState:", microphoneTrack.readyState);
     this.microphoneTrack = microphoneTrack;
     this.sendProducer = await this.sendTransport.produce({
       track: microphoneTrack,
@@ -546,6 +597,7 @@ class VoiceChannelSession {
         media: "audio",
       },
     });
+    console.log("[voice] sendProducer created, id:", this.sendProducer.id, "paused:", this.sendProducer.paused);
   }
 
   /**
@@ -694,6 +746,8 @@ class VoiceChannelSession {
       return;
     }
 
+    console.log("[voice] signal event:", payload.signalType, "from:", payload.sourceUserId);
+
     const signalPayload = parsePayloadJson<Record<string, unknown>>(payload.payloadJson);
     const requestId =
       typeof signalPayload.requestId === "string" ? signalPayload.requestId : null;
@@ -717,6 +771,8 @@ class VoiceChannelSession {
           ? signalPayload.producerUserId
           : null;
 
+      console.log("[voice] producer.available:", { producerId, producerUserId, isOwn: producerUserId === this.currentUserId });
+
       if (producerId && producerUserId && producerUserId !== this.currentUserId) {
         await this.consumeProducer(producerId);
       }
@@ -727,6 +783,7 @@ class VoiceChannelSession {
     if (payload.signalType === "mediasoup.producer.closed") {
       const producerId =
         typeof signalPayload.producerId === "string" ? signalPayload.producerId : null;
+      console.log("[voice] producer.closed:", producerId);
 
       if (producerId) {
         this.closeRemoteProducer(producerId);
@@ -739,9 +796,11 @@ class VoiceChannelSession {
    */
   private async consumeProducer(producerId: string): Promise<void> {
     if (!this.recvTransport || !this.device || this.remoteConsumers.has(producerId)) {
+      console.warn("[voice] consumeProducer skipped:", { producerId, hasRecv: !!this.recvTransport, hasDevice: !!this.device, alreadyConsumed: this.remoteConsumers.has(producerId) });
       return;
     }
 
+    console.log("[voice] consuming remote producer:", producerId);
     const consumeResponse = await this.requestSignal<{
       consumerId: string;
       producerId: string;
@@ -759,6 +818,7 @@ class VoiceChannelSession {
       },
       "mediasoup.consume.response",
     );
+    console.log("[voice] consume response:", { consumerId: consumeResponse.consumerId, kind: consumeResponse.kind, mediaType: consumeResponse.mediaType, producerUserId: consumeResponse.producerUserId });
 
     const consumer = await this.recvTransport.consume({
       id: consumeResponse.consumerId,
@@ -769,6 +829,8 @@ class VoiceChannelSession {
         producerUserId: consumeResponse.producerUserId,
       },
     });
+    console.log("[voice] consumer created, track:", consumer.track.kind, "enabled:", consumer.track.enabled, "readyState:", consumer.track.readyState, "paused:", consumer.paused);
+
     const stream = new MediaStream([consumer.track]);
     const audioElement =
       consumeResponse.mediaType === "audio"
@@ -787,6 +849,7 @@ class VoiceChannelSession {
     });
 
     if (audioElement && !this.currentVoiceState.deafened) {
+      console.log("[voice] starting audio playback for remote consumer, deafened:", this.currentVoiceState.deafened);
       await ensureRemoteAudioPlayback(audioElement);
     }
 
@@ -856,16 +919,21 @@ class VoiceChannelSession {
     expectedResponseType: string,
   ): Promise<TResponse> {
     const requestId = crypto.randomUUID();
+    console.log("[voice] requestSignal →", signalType, "requestId:", requestId);
 
     const responsePromise = new Promise<TResponse>((resolve, reject) => {
       const timeoutId = window.setTimeout(() => {
         this.pendingSignalRequests.delete(requestId);
+        console.error("[voice] signaling TIMEOUT for", signalType, "requestId:", requestId);
         reject(new Error(`Signaling response timed out for ${signalType}.`));
       }, 10_000);
 
       this.pendingSignalRequests.set(requestId, {
         expectedSignalType: expectedResponseType,
-        resolve: (responsePayload) => resolve(responsePayload as TResponse),
+        resolve: (responsePayload) => {
+          console.log("[voice] requestSignal ←", expectedResponseType, "requestId:", requestId);
+          resolve(responsePayload as TResponse);
+        },
         reject,
         timeoutId,
       });
@@ -884,6 +952,7 @@ class VoiceChannelSession {
         }),
       });
     } catch (error) {
+      console.error("[voice] requestSignal FAILED for", signalType, error);
       const pendingSignalRequest = this.pendingSignalRequests.get(requestId);
 
       if (pendingSignalRequest) {
@@ -896,6 +965,15 @@ class VoiceChannelSession {
 
     return responsePromise;
   }
+}
+
+function attachTransportDebugListeners(transport: Transport, label: string): void {
+  transport.on("connectionstatechange", (state: string) => {
+    console.log(`[voice] ${label} transport connectionState →`, state);
+  });
+  transport.on("icegatheringstatechange", (state: string) => {
+    console.log(`[voice] ${label} transport iceGatheringState →`, state);
+  });
 }
 
 function parsePayloadJson<TPayload>(payloadJson: string): TPayload {
