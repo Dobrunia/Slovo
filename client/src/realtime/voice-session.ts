@@ -208,6 +208,7 @@ class VoiceChannelSession {
   private inputDeviceId: string | null;
   private currentVoiceState: ClientCurrentVoiceState;
   private destroyed = false;
+  private screenSharePublishInProgress = false;
 
   /**
    * Создает новый voice session controller для конкретного server/channel target.
@@ -649,9 +650,11 @@ class VoiceChannelSession {
    * Захватывает экран пользователя и публикует video producer демонстрации.
    */
   private async startScreenSharePublishing(): Promise<void> {
-    if (!this.sendTransport) {
+    if (!this.sendTransport || this.screenSharePublishInProgress) {
       return;
     }
+
+    this.screenSharePublishInProgress = true;
 
     try {
       const screenShareTrack = await this.captureScreenShareTrack();
@@ -675,6 +678,8 @@ class VoiceChannelSession {
     } catch (error) {
       await this.stopScreenSharePublishing();
       await Promise.resolve(this.onScreenShareCaptureFailed(error));
+    } finally {
+      this.screenSharePublishInProgress = false;
     }
   }
 
