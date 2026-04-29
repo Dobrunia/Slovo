@@ -1,0 +1,71 @@
+# Сервер: тесты → билд → (только push в main) выгрузка dist по FTP.
+#
+# FTP-Deploy-Action: local-dir = ./server/dist/ — на FTP уходит СОДЕРЖИМОЕ каталога
+# сборки (структура из tsc с rootDir .. : например server/src/…, shared/…).
+# server-dir: ./ — относительно каталога, в который попадает FTP-пользователь при логине.
+# При необходимости замени server-dir на /
+#
+# Секреты репозитория (Settings → Secrets and variables → Actions):
+#   SERVER_FTP_SERVER   — хост FTP (бэкенд)
+#   SERVER_FTP_USERNAME
+#   SERVER_FTP_PASSWORD
+#
+name: Server CI and FTP deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "server/**"
+      - "shared/**"
+      - ".github/workflows/server-ci-deploy.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "server/**"
+      - "shared/**"
+      - ".github/workflows/server-ci-deploy.yml"
+
+concurrency:
+  group: server-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy to FTP
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: ${{ secrets.SERVER_FTP_SERVER }}
+          username: ${{ secrets.SERVER_FTP_USERNAME }}
+          password: ${{ secrets.SERVER_FTP_PASSWORD }}
+          local-dir: ./server/dist/
+          server-dir: ./
+          dangerous-clean-slate: false

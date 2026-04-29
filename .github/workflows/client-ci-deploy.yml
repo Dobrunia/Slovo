@@ -1,0 +1,78 @@
+# Клиент: тесты → билд → (только push в main) выгрузка dist по FTP.
+#
+# FTP-Deploy-Action: local-dir = ./client/dist/ означает, что на сервер попадает
+# СОДЕРЖИМОЕ dist (index.html, assets/…), а не вложенная папка «dist».
+# server-dir: ./ — каталог назначения относительно точки входа FTP-пользователя
+# (аккаунт уже открывается в www / public_html). Если хостинг ожидает абсолютный
+# корень chroot, замени на server-dir: /
+#
+# Секреты репозитория (Settings → Secrets and variables → Actions):
+#   CLIENT_FTP_SERVER   — хост FTP (фронт)
+#   CLIENT_FTP_USERNAME
+#   CLIENT_FTP_PASSWORD
+# Опционально:
+#   CLIENT_VITE_GRAPHQL_URL  — production API для билда
+#   CLIENT_VITE_REALTIME_URL
+#
+# При пустых CLIENT_VITE_* в env уйдут пустые строки — задай секреты для prod.
+
+name: Client CI and FTP deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "client/**"
+      - ".github/workflows/client-ci-deploy.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "client/**"
+      - ".github/workflows/client-ci-deploy.yml"
+
+concurrency:
+  group: client-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_GRAPHQL_URL: ${{ secrets.CLIENT_VITE_GRAPHQL_URL }}
+          VITE_REALTIME_URL: ${{ secrets.CLIENT_VITE_REALTIME_URL }}
+
+      - name: Deploy to FTP
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        with:
+          server: ${{ secrets.CLIENT_FTP_SERVER }}
+          username: ${{ secrets.CLIENT_FTP_USERNAME }}
+          password: ${{ secrets.CLIENT_FTP_PASSWORD }}
+          local-dir: ./client/dist/
+          server-dir: ./
+          dangerous-clean-slate: false
