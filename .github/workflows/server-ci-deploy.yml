@@ -1,16 +1,24 @@
-# Сервер: тесты → билд → (только push в main) выгрузка dist по FTP.
+# Сервер: тесты → билд → (только push в main) SSH-деплой на VPS.
 #
-# FTP-Deploy-Action: local-dir = ./server/dist/ — на FTP уходит СОДЕРЖИМОЕ каталога
-# сборки (структура из tsc с rootDir .. : например server/src/…, shared/…).
-# server-dir: ./ — относительно каталога, в который попадает FTP-пользователь при логине.
-# При необходимости замени server-dir на /
+# Деплой выполняется в 2 шага:
+# - копирует server/shared/docker-compose.yml с GitHub Actions на VPS (scp)
+# - затем удаленно выполняет команды по SSH
+# Важно: Deploy keys для VPS не нужны, потому что clone/pull на сервере не используется.
+#
+# Удаленный шаг:
+# - поднимает MySQL через docker compose
+# - запускает prisma migrate deploy
+# - собирает server
+# - перезапускает процесс через pm2
 #
 # Секреты репозитория (Settings → Secrets and variables → Actions):
-#   SERVER_FTP_SERVER   — хост FTP (бэкенд)
-#   SERVER_FTP_USERNAME
-#   SERVER_FTP_PASSWORD
+#   SERVER_SSH_HOST      — IPv4/домен VPS
+#   SERVER_SSH_PORT      — обычно 22
+#   SERVER_SSH_USERNAME  — обычно root или deploy
+#   SERVER_SSH_KEY       — приватный SSH-ключ (PEM/OpenSSH)
+#   SERVER_APP_PATH      — путь к репозиторию на VPS, например /opt/slovo
 #
-name: Server CI and FTP deploy
+name: Server CI and SSH deploy
 
 on:
   push:
@@ -64,13 +72,44 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Deploy to FTP
+      - name: Upload server files to VPS
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.6
+        uses: appleboy/scp-action@v0.1.7
         with:
-          server: ${{ secrets.SERVER_FTP_SERVER }}
-          username: ${{ secrets.SERVER_FTP_USERNAME }}
-          password: ${{ secrets.SERVER_FTP_PASSWORD }}
-          local-dir: ./server/dist/
-          server-dir: ./
-          dangerous-clean-slate: false
+          host: ${{ secrets.SERVER_SSH_HOST }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          username: ${{ secrets.SERVER_SSH_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "server,shared,docker-compose.yml"
+          target: ${{ secrets.SERVER_APP_PATH }}
+
+      - name: Deploy via SSH
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_SSH_HOST }}
+          port: ${{ secrets.SERVER_SSH_PORT }}
+          username: ${{ secrets.SERVER_SSH_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+
+            APP_PATH="${{ secrets.SERVER_APP_PATH }}"
+
+            mkdir -p "$APP_PATH"
+            cd "$APP_PATH"
+
+            docker compose up -d mysql
+
+            cd server
+            npm ci
+            npm run prisma:migrate:deploy
+            npm run build
+
+            if ! command -v pm2 >/dev/null 2>&1; then
+              npm install -g pm2
+            fi
+
+            pm2 start dist/server/src/index.js --name slovo-server --update-env || pm2 restart slovo-server --update-env
+            pm2 save
