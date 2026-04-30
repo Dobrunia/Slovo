@@ -130,19 +130,31 @@ jobs:
             docker exec -i "$MYSQL_CONTAINER" mysql -h127.0.0.1 -uroot -proot -e "SHOW DATABASES LIKE 'slovo';"
 
             cd server
+
             echo "Using DATABASE_URL from $APP_PATH/server/.env"
             test -f .env
             sed -n 's/^DATABASE_URL=.*/DATABASE_URL=[REDACTED]/p' .env
 
-            pm2 stop slovo-server || true
-            rm -rf node_modules
+            LOCK_HASH_FILE="$APP_PATH/server/.package-lock.sha256"
+            NEW_LOCK_HASH="$(sha256sum package-lock.json | awk '{print $1}')"
+            OLD_LOCK_HASH=""
+            if [ -f "$LOCK_HASH_FILE" ]; then
+              OLD_LOCK_HASH="$(cat "$LOCK_HASH_FILE")"
+            fi
 
             export PYTHON=/usr/bin/python3
 
-            if ! npm ci --foreground-scripts --loglevel verbose --no-audit --no-fund; then
-              npm cache clean --force || true
+            if [ ! -d node_modules ] || [ "$NEW_LOCK_HASH" != "$OLD_LOCK_HASH" ]; then
+              echo "Dependencies changed or node_modules missing, running npm ci..."
               rm -rf node_modules
-              npm ci --foreground-scripts --loglevel verbose --no-audit --no-fund --prefer-online
+              if ! npm ci --foreground-scripts --loglevel verbose --no-audit --no-fund; then
+                npm cache clean --force || true
+                rm -rf node_modules
+                npm ci --foreground-scripts --loglevel verbose --no-audit --no-fund --prefer-online
+              fi
+              echo "$NEW_LOCK_HASH" > "$LOCK_HASH_FILE"
+            else
+              echo "package-lock.json unchanged, reusing existing node_modules"
             fi
 
             npm run prisma:migrate:deploy
@@ -152,7 +164,30 @@ jobs:
               npm install -g pm2
             fi
 
-            pm2 start dist/server/src/index.js --name slovo-server --update-env || pm2 restart slovo-server --update-env
+            if pm2 describe slovo-server >/dev/null 2>&1; then
+              pm2 restart slovo-server --update-env
+            else
+              pm2 start dist/server/src/index.js --name slovo-server --update-env
+            fi
+
             pm2 save
 
-            curl -fsS http://127.0.0.1:4000/graphql >/dev/null
+            echo "Waiting for server to become ready on 127.0.0.1:4000..."
+            READY=0
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1:4000/graphql >/dev/null 2>&1; then
+                READY=1
+                break
+              fi
+              sleep 2
+            done
+
+            if [ "$READY" -ne 1 ]; then
+              echo "Server did not become ready in time. PM2 status:"
+              pm2 status
+              echo "PM2 logs:"
+              pm2 logs slovo-server --lines 200 --nostream || true
+              exit 1
+            fi
+
+            echo "Deploy completed successfully."
