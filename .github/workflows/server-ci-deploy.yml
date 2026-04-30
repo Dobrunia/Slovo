@@ -92,6 +92,7 @@ jobs:
           username: ${{ secrets.SERVER_SSH_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script_stop: true
+          command_timeout: 45m
           script: |
             set -euo pipefail
 
@@ -133,7 +134,8 @@ jobs:
             docker compose up -d mysql
 
             cd server
-            npm ci
+            export PYTHON=/usr/bin/python3
+            npm ci --foreground-scripts --loglevel verbose
             npm run prisma:migrate:deploy
             npm run build
 
