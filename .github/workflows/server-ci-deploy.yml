@@ -134,8 +134,14 @@ jobs:
             docker compose up -d mysql
 
             cd server
+            pm2 stop slovo-server || true
+            rm -rf node_modules
             export PYTHON=/usr/bin/python3
-            npm ci --foreground-scripts --loglevel verbose
+            if ! npm ci --foreground-scripts --loglevel verbose --no-audit --no-fund; then
+              npm cache clean --force || true
+              rm -rf node_modules
+              npm ci --foreground-scripts --loglevel verbose --no-audit --no-fund --prefer-online
+            fi
             npm run prisma:migrate:deploy
             npm run build
 
