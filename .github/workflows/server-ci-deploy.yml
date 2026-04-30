@@ -97,6 +97,7 @@ jobs:
             set -euo pipefail
 
             APP_PATH="${{ secrets.SERVER_APP_PATH }}"
+            export COMPOSE_PROJECT_NAME=slovo
 
             mkdir -p "$APP_PATH"
             cd "$APP_PATH"
@@ -132,8 +133,12 @@ jobs:
             fi
 
             docker compose up -d mysql
+            docker exec -i slovo-mysql-1 mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS slovo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+            docker exec -i slovo-mysql-1 mysql -uroot -proot -e "SHOW DATABASES LIKE 'slovo';"
 
             cd server
+            echo "Using DATABASE_URL from /opt/slovo/server/.env"
+            sed -n 's/^DATABASE_URL=.*/DATABASE_URL=[REDACTED]/p' .env
             pm2 stop slovo-server || true
             rm -rf node_modules
             export PYTHON=/usr/bin/python3
@@ -151,3 +156,4 @@ jobs:
 
             pm2 start dist/server/src/index.js --name slovo-server --update-env || pm2 restart slovo-server --update-env
             pm2 save
+            curl -fsS http://127.0.0.1:4000/graphql >/dev/null

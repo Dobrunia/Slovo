@@ -5,6 +5,8 @@
         <DbrInput
           v-model="form.email"
           label="Email"
+          type="email"
+          autocomplete="email"
           required
         />
 
