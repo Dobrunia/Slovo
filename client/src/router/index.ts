@@ -4,6 +4,7 @@ import {
   DEFAULT_CLIENT_APP_TITLE,
   ROOT_ROUTE_PATH,
   LOGIN_ROUTE_PATH,
+  PRIVACY_POLICY_ROUTE_PATH,
   REGISTER_ROUTE_PATH,
   SERVER_INVITE_ROUTE_PATH,
 } from "../constants";
@@ -21,6 +22,7 @@ import { useAuthStore } from "../stores/auth";
 import HomePage from "../views/HomePage.vue";
 import LandingPage from "../views/LandingPage.vue";
 import LoginPage from "../views/LoginPage.vue";
+import PrivacyPolicyPage from "../views/PrivacyPolicyPage.vue";
 import RegisterPage from "../views/RegisterPage.vue";
 
 /**
@@ -54,6 +56,13 @@ export const router = createRouter({
         guestOnly: true,
         guestLayout: "register",
         title: "Регистрация",
+      },
+    },
+    {
+      path: PRIVACY_POLICY_ROUTE_PATH,
+      component: PrivacyPolicyPage,
+      meta: {
+        title: "Политика обработки персональных данных",
       },
     },
     {

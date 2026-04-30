@@ -31,13 +31,37 @@
         />
       </div>
 
+      <div class="register-page__consent dbru-text-sm">
+        <DbrCheckbox
+          v-model="isPersonalDataConsentAccepted"
+          class="register-page__consent-control"
+          @update:model-value="consentErrorMessage = null"
+        />
+        <p class="register-page__consent-text" @click="togglePersonalDataConsent">
+          Я даю согласие на обработку моих персональных данных в целях регистрации, авторизации и
+          использования сервиса в соответствии с
+          <RouterLink
+            class="register-page__consent-link"
+            :to="PRIVACY_POLICY_ROUTE_PATH"
+            @click.stop
+          >
+            [Политикой в отношении обработки персональных данных]
+          </RouterLink>
+          .
+        </p>
+      </div>
+
+      <p v-if="consentErrorMessage" class="register-page__error dbru-text-sm">
+        {{ consentErrorMessage }}
+      </p>
+
       <p v-if="errorMessage" class="register-page__error dbru-text-sm">
         {{ errorMessage }}
       </p>
 
       <DbrButton
         class="register-page__primary-action"
-        :disabled="authStore.isSubmitting"
+        :disabled="isSubmitDisabled"
         :native-type="'submit'"
       >
         {{ submitLabel }}
@@ -62,14 +86,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from "vue";
+import { computed, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { DbrButton, DbrInput } from "dobruniaui-vue";
+import { DbrButton, DbrCheckbox, DbrInput } from "dobruniaui-vue";
 import AuthFormPanel from "../components/auth/AuthFormPanel.vue";
 import {
   APP_HOME_ROUTE_PATH,
   AUTH_REDIRECT_QUERY_KEY,
   LOGIN_ROUTE_PATH,
+  PRIVACY_POLICY_ROUTE_PATH,
 } from "../constants";
 import { readAuthRedirectPath } from "../router/guards";
 import { useAuthStore } from "../stores/auth";
@@ -85,6 +110,8 @@ const form = reactive<RegisterFormModel>({
   displayName: "",
   password: "",
 });
+const isPersonalDataConsentAccepted = ref(false);
+const consentErrorMessage = ref<string | null>(null);
 
 /**
  * Текст основной кнопки регистрации.
@@ -95,11 +122,19 @@ const submitLabel = computed(() => (authStore.isSubmitting ? "Создаем..."
  * Сообщение об ошибке регистрации.
  */
 const errorMessage = computed(() => authStore.errorMessage);
+const isSubmitDisabled = computed(
+  () => authStore.isSubmitting || !isPersonalDataConsentAccepted.value,
+);
 
 /**
  * Выполняет регистрацию и сразу переводит пользователя в приложение.
  */
 async function handleSubmit(): Promise<void> {
+  if (!isPersonalDataConsentAccepted.value) {
+    consentErrorMessage.value = "Нужно согласиться на обработку персональных данных.";
+    return;
+  }
+
   await authStore.register({
     email: form.email,
     username: form.username,
@@ -123,6 +158,14 @@ async function goToLogin(): Promise<void> {
         readAuthRedirectPath(route.query[AUTH_REDIRECT_QUERY_KEY]) ?? undefined,
     },
   });
+}
+
+/**
+ * Переключает согласие при клике на текст рядом с чекбоксом.
+ */
+function togglePersonalDataConsent(): void {
+  isPersonalDataConsentAccepted.value = !isPersonalDataConsentAccepted.value;
+  consentErrorMessage.value = null;
 }
 </script>
 
@@ -164,5 +207,24 @@ async function goToLogin(): Promise<void> {
 .register-page__error {
   margin: 0;
   color: var(--dbru-color-error);
+}
+
+.register-page__consent {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--dbru-space-2);
+}
+
+.register-page__consent-control {
+  flex: 0 0 auto;
+}
+
+.register-page__consent-text {
+  margin: 0;
+  cursor: pointer;
+}
+
+.register-page__consent-link {
+  color: var(--dbru-color-primary);
 }
 </style>

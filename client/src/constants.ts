@@ -52,6 +52,11 @@ export const LOGIN_ROUTE_PATH = "/login";
 export const REGISTER_ROUTE_PATH = "/register";
 
 /**
+ * Публичный маршрут политики обработки персональных данных.
+ */
+export const PRIVACY_POLICY_ROUTE_PATH = "/privacy-policy";
+
+/**
  * Защищенный основной маршрут приложения.
  */
 export const APP_HOME_ROUTE_PATH = "/app";
